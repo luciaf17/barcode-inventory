@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ingresar datos de producto</title>
+    <style>
+        /* Estilos generales */
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        .form-container {
+            background-color: #ffffff;
+            padding: 20px 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            max-width: 400px;
+            width: 100%;
+            text-align: center;
+        }
+
+        h1 {
+            color: #333;
+            font-size: 1.8em;
+            margin-bottom: 20px;
+        }
+
+        label {
+            font-weight: bold;
+            color: #555;
+            display: block;
+            margin-top: 15px;
+        }
+
+        input[type="number"],
+        input[type="text"],
+        select {
+            width: 100%;
+            padding: 10px;
+            margin-top: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-size: 1em;
+            transition: border-color 0.3s;
+        }
+
+        .submit-button {
+            background-color: #5a67d8;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            padding: 10px 15px;
+            font-size: 1em;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 20px;
+            width: 100%;
+            transition: background-color 0.3s, transform 0.1s;
+        }
+
+        #message-container {
+            margin-top: 20px;
+            font-size: 1em;
+            color: #333;
+        }
+
+        #message-container.error {
+            color: red;
+        }
+
+        #message-container.success {
+            color: green;
+        }
+
+        #descripcion-container {
+            display: block;
+            margin-top: 15px;
+        }
+        button {
+        margin: 10px;
+        padding: 8px 16px;
+        font-size: 1em;
+        cursor: pointer;
+        background-color: #5a67d8;
+        color: #ffffff;
+        border: none;
+        border-radius: 4px;
+        transition: background-color 0.3s;
+    }
+
+    button:hover {
+        background-color: #4c51bf;
+    }
+    </style>
+</head>
+<body>
+    <div class="form-container">
+        <button onclick="window.location.href='/'" style="margin: 10px; padding: 8px 16px; font-size: 1em; cursor: pointer;">
+            Volver al Inicio
+        </button>    
+        <h1>Ingresar datos de producto</h1>
+        <form id="data-form">
+            <label for="descripcion">Descripción:</label>
+            <input type="text" id="descripcion" name="descripcion" placeholder="Ingrese la descripción" required>
+
+            <label for="cantidad">Cantidad:</label>
+            <input type="number" id="cantidad" name="cantidad" required>
+
+            <label for="deposito">Depósito:</label>
+            <select id="deposito" name="deposito" required>
+                <option value="">Seleccione Depósito</option>
+                {% for deposito in depositos %}
+                    <option value="{{ deposito }}">{{ deposito }}</option>
+                {% endfor %}
+            </select>
+
+            <label for="estanteria">Estantería:</label>
+            <select id="estanteria" name="estanteria" required>
+                <option value="">Seleccione Estantería</option>
+                {% for estanteria in estanterias %}
+                    <option value="{{ estanteria }}">{{ estanteria }}</option>
+                {% endfor %}
+            </select>
+
+            <label for="locacion">Locación:</label>
+            <select id="locacion" name="locacion" required>
+                <option value="">Seleccione Locación</option>
+                {% for locacion in locaciones %}
+                    <option value="{{ locacion }}">{{ locacion }}</option>
+                {% endfor %}
+            </select>
+
+            <button type="submit" class="submit-button">Enviar</button>
+        </form>
+
+        <div id="message-container"></div>
+    </div>
+
+    <script>
+        document.getElementById('data-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const descripcion = document.getElementById("descripcion").value;
+            const cantidad = document.getElementById("cantidad").value;
+            const deposito = document.getElementById("deposito").value;
+            const estanteria = document.getElementById("estanteria").value;
+            const locacion = document.getElementById("locacion").value;
+            const messageContainer = document.getElementById("message-container");
+    
+            fetch('/agregar_manual', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ descripcion, cantidad, deposito, estanteria, locacion })
+            })
+            .then(response => response.json())
+            .then(data => {
+                messageContainer.classList.remove("success", "error");
+                if (data.error) {
+                    messageContainer.classList.add("error");
+                    messageContainer.innerText = data.error;
+                } else {
+                    messageContainer.classList.add("success");
+                    messageContainer.innerText = data.message;
+                }
+            })
+            .catch(error => {
+                console.error("Error:", error);
+                messageContainer.classList.add("error");
+                messageContainer.innerText = "Hubo un error al enviar los datos.";
+            });
+        });
+    </script>    
+</body>
+</html>

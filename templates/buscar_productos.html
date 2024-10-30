@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Buscar Productos</title>
+    <style>
+        /* Estilos generales */
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
+            margin: 0;
+            padding: 20px;
+        }
+
+        h1 {
+            color: #333;
+            text-align: center;
+            font-size: 1.8em;
+            margin-bottom: 20px;
+        }
+
+        .table-container {
+            width: 100%;
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 10px;
+            text-align: left;
+            border: 1px solid #ddd;
+        }
+
+        th {
+            background-color: #5a67d8;
+            color: white;
+        }
+
+        /* Estilos para el campo de búsqueda y filtros */
+        .filters {
+            margin-bottom: 15px;
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .filters input,
+        .filters select {
+            padding: 8px;
+            font-size: 1em;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .action-buttons button {
+            padding: 5px 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        .edit {
+            background-color: #4caf50;
+            color: white;
+        }
+
+        .delete {
+            background-color: #e53e3e;
+            color: white;
+        }
+
+        .clear-filters {
+            background-color: #e53e3e;
+            color: white;
+        }
+
+        /* Botones de navegación */
+        button {
+            margin: 10px;
+            padding: 8px 16px;
+            font-size: 1em;
+            cursor: pointer;
+            background-color: #5a67d8;
+            color: #ffffff;
+            border: none;
+            border-radius: 4px;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #4c51bf;
+        }
+
+        /* Media Query para pantallas pequeñas */
+        @media (max-width: 600px) {
+            .action-buttons {
+                flex-direction: column;
+            }
+        }
+
+        .editable {
+            background-color: #f4f4f4;
+            border: 1px solid #ddd;
+            padding: 5px;
+        }
+    </style>
+</head>
+<body>
+    <button onclick="window.location.href='/'" style="margin: 10px; padding: 8px 16px; font-size: 1em; cursor: pointer;">
+        Volver al Inicio
+    </button>
+    <h1>Buscar Productos</h1>
+
+    <!-- Búsqueda y Filtros -->
+    <div class="filters">
+        <input type="text" id="search_codigo" placeholder="Buscar por código..." value="{{ search_codigo }}">
+        <input type="text" id="search_descripcion" placeholder="Buscar por descripción..." value="{{ search_descripcion }}">
+        
+        <select id="filtro_deposito">
+            <option value="">Filtrar por Depósito</option>
+            {% for deposito in depositos %}
+                <option value="{{ deposito }}" {% if filtro_deposito == deposito %}selected{% endif %}>{{ deposito }}</option>
+            {% endfor %}
+        </select>
+
+        <select id="filtro_estanteria">
+            <option value="">Filtrar por Estantería</option>
+            {% for estanteria in estanterias %}
+                <option value="{{ estanteria }}" {% if filtro_estanteria == estanteria %}selected{% endif %}>{{ estanteria }}</option>
+            {% endfor %}
+        </select>
+
+        <select id="filtro_locacion">
+            <option value="">Filtrar por Locación</option>
+            {% for locacion in locaciones %}
+                <option value="{{ locacion }}" {% if filtro_locacion == locacion %}selected{% endif %}>{{ locacion }}</option>
+            {% endfor %}
+        </select>
+
+        <button onclick="applyFilters()">Buscar</button>
+        <button class="clear-filters" onclick="clearFilters()">Quitar Filtros</button>
+    </div>
+
+    <!-- Tabla de Productos -->
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Código Interno</th>
+                    <th>Código</th>
+                    <th>Descripción</th>
+                    <th>Cantidad</th>
+                    <th>Depósito</th>
+                    <th>Estantería</th>
+                    <th>Locación</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for producto in productos %}
+                <tr data-codigo-interno="{{ producto['Codigo_interno'] }}">
+                    <td>{{ producto['Codigo_interno'] }}</td>
+                    <td>{{ producto['Codigo'] }}</td>
+                    <td contenteditable="false" class="editable">{{ producto['descripcion'] }}</td>
+                    <td contenteditable="false" class="editable">{{ producto['cantidad'] }}</td>
+                    <td contenteditable="false" class="editable">{{ producto['deposito'] }}</td>
+                    <td contenteditable="false" class="editable">{{ producto['estanteria'] }}</td>
+                    <td contenteditable="false" class="editable">{{ producto['locacion'] }}</td>
+                    <td class="action-buttons">
+                        <button class="edit" onclick="habilitarEdicion(this)">Editar</button>
+                        <button class="save" onclick="guardarProducto(this)" style="display: none;">Guardar</button>
+                        <button class="delete" onclick="eliminarProducto('{{ producto['Codigo_interno'] }}')">Eliminar</button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Paginación -->
+    <div class="pagination">
+        {% if page > 1 %}
+            <button onclick="navigatePage({{ page - 1 }})">Anterior</button>
+        {% endif %}
+
+        {% for p in range(1, total_pages + 1) %}
+            <button onclick="navigatePage({{ p }})" {% if p == page %}style="font-weight: bold;"{% endif %}>{{ p }}</button>
+        {% endfor %}
+
+        {% if page < total_pages %}
+            <button onclick="navigatePage({{ page + 1 }})">Siguiente</button>
+        {% endif %}
+    </div>
+
+    <script>
+        function applyFilters() {
+            const searchCodigo = document.getElementById("search_codigo").value;
+            const searchDescripcion = document.getElementById("search_descripcion").value;
+            const filtroDeposito = document.getElementById("filtro_deposito").value;
+            const filtroEstanteria = document.getElementById("filtro_estanteria").value;
+            const filtroLocacion = document.getElementById("filtro_locacion").value;
+
+            const params = new URLSearchParams({
+                search_codigo: searchCodigo,
+                search_descripcion: searchDescripcion,
+                filtro_deposito: filtroDeposito,
+                filtro_estanteria: filtroEstanteria,
+                filtro_locacion: filtroLocacion
+            });
+
+            window.location.href = `/buscar_productos?${params.toString()}`;
+        }
+
+        function clearFilters() {
+            window.location.href = '/buscar_productos';
+        }
+
+        function navigatePage(page) {
+            const params = new URLSearchParams(window.location.search);
+            params.set('page', page);
+            window.location.href = `/buscar_productos?${params.toString()}`;
+        }
+
+        function habilitarEdicion(button) {
+            const row = button.closest("tr");
+            row.querySelectorAll(".editable").forEach(cell => {
+                cell.contentEditable = "true";
+                cell.style.backgroundColor = "#fff";
+            });
+            button.style.display = "none";  // Oculta el botón Editar
+            row.querySelector(".save").style.display = "inline";  // Muestra el botón Guardar
+        }
+
+        function guardarProducto(button) {
+            const row = button.closest("tr");
+            const codigoInterno = row.getAttribute("data-codigo-interno");
+            const descripcion = row.cells[2].innerText;
+            const cantidad = row.cells[3].innerText;
+            const deposito = row.cells[4].innerText;
+            const estanteria = row.cells[5].innerText;
+            const locacion = row.cells[6].innerText;
+
+            // Realiza una solicitud POST para actualizar el producto
+            fetch(`/editar_producto`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    codigo_interno: codigoInterno,
+                    descripcion: descripcion,
+                    cantidad: cantidad,
+                    deposito: deposito,
+                    estanteria: estanteria,
+                    locacion: locacion
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert("Producto actualizado con éxito.");
+                } else {
+                    alert("Error al actualizar el producto: " + data.error);
+                }
+            })
+            .catch(error => {
+                console.error("Error al actualizar el producto:", error);
+            });
+
+            // Deshabilita la edición y ajusta los estilos
+            row.querySelectorAll(".editable").forEach(cell => {
+                cell.contentEditable = "false";
+                cell.style.backgroundColor = "#f4f4f4";
+            });
+            button.style.display = "none";  // Oculta el botón Guardar
+            row.querySelector(".edit").style.display = "inline";  // Muestra el botón Editar
+        }
+
+        function eliminarProducto(codigoInterno) {
+            fetch(`/eliminar_producto?codigo_interno=${codigoInterno}`, {
+                method: 'DELETE'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert("Producto eliminado con éxito.");
+                    location.reload();
+                } else {
+                    alert("Error al eliminar el producto: " + data.error);
+                }
+            })
+            .catch(error => {
+                console.error("Error al eliminar el producto:", error);
+            });
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,46 @@
+# Entorno virtual
+env/
+venv/
+*.venv
+*.virtualenv
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# Archivos de configuración de PyInstaller
+*.spec
+dist/
+build/
+
+# Configuración de credenciales y claves de acceso
+*.json
+wouchuk-92244b5cccc1*.json
+
+# Archivos y carpetas de cache de Python
+*.egg-info/
+.eggs/
+
+# Configuración del sistema operativo
+.DS_Store
+Thumbs.db
+
+# Archivos de logs
+*.log
+
+# Archivos temporales y de swap
+*.swp
+*.swo
+*.tmp
+*.temp
+
+# Archivos de plantillas compiladas
+__pycache__/
+*.cache
+
+# Archivos de editor de texto o IDE
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
