@@ -92,25 +92,22 @@
 
             <label for="deposito">Depósito:</label>
             <select id="deposito" name="deposito" required>
-                <option value="">Seleccione Depósito</option>
                 {% for deposito in depositos %}
-                    <option value="{{ deposito }}">{{ deposito }}</option>
+                    <option value="{{ deposito }}" {% if loop.first %}selected{% endif %}>{{ deposito }}</option>
                 {% endfor %}
             </select>
 
             <label for="estanteria">Estantería:</label>
             <select id="estanteria" name="estanteria" required>
-                <option value="">Seleccione Estantería</option>
                 {% for estanteria in estanterias %}
-                    <option value="{{ estanteria }}">{{ estanteria }}</option>
+                    <option value="{{ estanteria }}" {% if loop.first %}selected{% endif %}>{{ estanteria }}</option>
                 {% endfor %}
             </select>
 
             <label for="locacion">Locación:</label>
             <select id="locacion" name="locacion" required>
-                <option value="">Seleccione Locación</option>
                 {% for locacion in locaciones %}
-                    <option value="{{ locacion }}">{{ locacion }}</option>
+                    <option value="{{ locacion }}" {% if loop.first %}selected{% endif %}>{{ locacion }}</option>
                 {% endfor %}
             </select>
 
@@ -127,24 +124,42 @@
     </div>
 
     <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            // Asigna el valor por defecto a los campos si están vacíos
+            if (!document.getElementById("deposito").value) {
+                document.getElementById("deposito").selectedIndex = 1;
+            }
+            if (!document.getElementById("estanteria").value) {
+                document.getElementById("estanteria").selectedIndex = 1; 
+            }
+            if (!document.getElementById("locacion").value) {
+                document.getElementById("locacion").selectedIndex = 1; 
+            }
+        });
+    
         const urlParams = new URLSearchParams(window.location.search);
         const code = urlParams.get('code');
         document.getElementById('code').value = code || ""; 
-
+    
         if (code) {
+            // Guarda valores actuales para no reemplazarlos innecesariamente
+            const depositoOriginal = document.getElementById("deposito").value;
+            const estanteriaOriginal = document.getElementById("estanteria").value;
+            const locacionOriginal = document.getElementById("locacion").value;
+    
             fetch(`/verificar_producto?code=${code}`)
                 .then(response => response.json())
                 .then(data => {
                     if (data.producto) {
-                        document.getElementById("cantidad").value = data.producto.cantidad;
-                        document.getElementById("deposito").value = data.producto.deposito;
-                        document.getElementById("estanteria").value = data.producto.estanteria;
-                        document.getElementById("locacion").value = data.producto.locacion;
-                        document.getElementById("descripcion").value = data.producto.descripcion;
+                        document.getElementById("cantidad").value = data.producto.cantidad || "";
+                        document.getElementById("deposito").value = data.producto.deposito || depositoOriginal;
+                        document.getElementById("estanteria").value = data.producto.estanteria || estanteriaOriginal;
+                        document.getElementById("locacion").value = data.producto.locacion || locacionOriginal;
+                        document.getElementById("descripcion").value = data.producto.descripcion || "";
                     }
                 });
         }
-
+    
         document.getElementById('data-form').addEventListener('submit', function(e) {
             e.preventDefault();
             const code = document.getElementById("code").value;
@@ -154,7 +169,7 @@
             const locacion = document.getElementById("locacion").value;
             const descripcion = document.getElementById("descripcion").value;
             const messageContainer = document.getElementById("message-container");
-
+    
             fetch('/agregar', {
                 method: 'POST',
                 headers: {
@@ -180,5 +195,6 @@
             });
         });
     </script>
+    
 </body>
 </html>

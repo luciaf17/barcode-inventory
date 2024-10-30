@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, session
 import requests
 from bs4 import BeautifulSoup
 import gspread
@@ -7,6 +7,7 @@ import re
 import logging
 import socket
 import math
+import datetime
 
 
 app = Flask(__name__)
@@ -24,6 +25,9 @@ sheet = client.open_by_key('1GRtJhJitw1nY4U8ZcNDJozIeMU5yMa_0pfw4hCED-hk').sheet
 depositos_sheet = client.open_by_key('1GRtJhJitw1nY4U8ZcNDJozIeMU5yMa_0pfw4hCED-hk').worksheet("Deposito")
 estanterias_sheet = client.open_by_key('1GRtJhJitw1nY4U8ZcNDJozIeMU5yMa_0pfw4hCED-hk').worksheet("Estanteria")
 locaciones_sheet = client.open_by_key('1GRtJhJitw1nY4U8ZcNDJozIeMU5yMa_0pfw4hCED-hk').worksheet("Locacion")
+interdeposito_sheet = client.open_by_key('1GRtJhJitw1nY4U8ZcNDJozIeMU5yMa_0pfw4hCED-hk').worksheet("Interdeposito")
+stock_sheet = client.open_by_key('1GRtJhJitw1nY4U8ZcNDJozIeMU5yMa_0pfw4hCED-hk').worksheet("Stock")
+
 
 def obtener_opciones(worksheet):
     return [row[0] for row in worksheet.get_all_values()]
@@ -216,6 +220,63 @@ def buscar_productos():
         filtro_locacion=filtro_locacion
     )
 
+def obtener_datos_producto(codigo):
+    celdas = sheet.get_all_records()
+    for fila in celdas:
+        if str(fila.get("Codigo")) == str(codigo):  # Comparar como cadena
+            return fila.get("Codigo_interno"), fila.get("Codigo"), fila.get("Titulo")  # Título es la descripción
+    return None, None, None
+
+@app.route('/buscar_producto_interdeposito')
+def buscar_producto_interdeposito():
+    query = request.args.get('query', '').lower()
+    productos_raw = sheet.get_all_records()
+
+    # Añade un print para depuración y revisar la estructura de productos_raw
+    print("productos_raw:", productos_raw)
+
+    # Filtrar productos que coincidan con la descripción
+    productos = [
+        {
+            "codigo_interno": producto.get("Codigo_interno") or producto.get("codigo_interno"),
+            "codigo": producto.get("Codigo") or producto.get("codigo"),
+            "descripcion": producto.get("Titulo") or producto.get("titulo")
+        }
+        for producto in productos_raw if query in producto.get("Titulo", "").lower() or query in producto.get("titulo", "").lower()
+    ]
+
+    # Añade otro print para ver cómo se han estructurado los productos después del filtrado
+    print("productos encontrados:", productos)
+
+    return jsonify({"productos": productos})
+
+
+@app.route('/interdeposito_manual')
+def interdeposito_manual():
+    codigo_interno = request.args.get('codigo_interno')  # Captura el código interno desde la URL
+    print("Código interno recibido en /interdeposito_manual:", codigo_interno)  # Verificar en consola
+
+    if not codigo_interno:
+        return "Código interno no encontrado en la solicitud", 400
+    
+    # Buscar el producto en la hoja de Productos usando codigo_interno
+    producto = next((p for p in sheet.get_all_records() if str(p.get("Codigo_interno")) == str(codigo_interno)), None)
+    
+    # Verificar si se encontró el producto
+    if producto is None:
+        return "El producto no está registrado en la hoja de productos", 404
+
+    descripcion = producto.get("Titulo", "")
+    codigo = producto.get("Codigo", "")
+    depositos = obtener_opciones(depositos_sheet)  # Opciones para el dropdown de depósitos
+
+    return render_template('interdeposito.html', 
+                           codigo=codigo, 
+                           codigo_interno=codigo_interno, 
+                           descripcion=descripcion, 
+                           depositos=depositos)
+
+
 @app.route('/agregar', methods=['POST'])
 def agregar_codigo():
     data = request.get_json()
@@ -298,6 +359,59 @@ def agregar_manual():
         except Exception as e:
             logger.error(f"Error al escribir en Google Sheets: {e}")
             return jsonify({"error": "Error al escribir en Google Sheets"}), 500
+        
+@app.route('/opciones')
+def opciones():
+    codigo = request.args.get('code')
+    print("Código recibido en /opciones:", codigo)  # Esto imprimirá el código en la consola
+    
+    if not codigo:
+        return "Código no encontrado", 400
+    
+    return render_template('opciones.html', codigo=codigo)
+
+
+
+# Ruta para el formulario de Interdeposito
+@app.route('/interdeposito')
+def interdeposito():
+    codigo = request.args.get('code')  # Captura el código desde la URL
+    print("Código recibido en /interdeposito:", codigo)  # Verificar en consola
+    
+    if not codigo:
+        return "Código no encontrado en la solicitud", 400
+    
+    # Buscar el producto en la hoja de Productos
+    codigo_interno, codigo, descripcion = obtener_datos_producto(codigo)
+    
+    
+    depositos = obtener_opciones(depositos_sheet)  # Opciones para el dropdown de depósitos
+
+    return render_template('interdeposito.html', 
+                           codigo=codigo, 
+                           codigo_interno=codigo_interno, 
+                           descripcion=descripcion, 
+                           depositos=depositos)
+
+# Ruta para procesar y guardar el movimiento de Interdeposito
+@app.route('/guardar_interdeposito', methods=['POST'])
+def guardar_interdeposito():
+    codigo = request.form.get('codigo')
+    codigo_interno = request.form.get('codigo_interno')
+    descripcion = request.form.get('descripcion')
+    deposito_origen = request.form.get('deposito_origen')
+    deposito_destino = request.form.get('deposito_destino')
+    cantidad = int(request.form.get('cantidad'))
+    observaciones = request.form.get('observaciones', '')
+    fecha = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # Guardar el registro en la hoja de "Interdeposito"
+    try:
+        interdeposito_sheet.append_row([fecha, codigo_interno, codigo, descripcion, deposito_origen, deposito_destino, cantidad, observaciones])
+        return jsonify({"message": "Movimiento registrado con éxito"}), 200
+    except Exception as e:
+        return jsonify({"error": f"Error al actualizar Google Sheets: {e}"}), 500
+
 
 
 if __name__ == '__main__':

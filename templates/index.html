@@ -3,8 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Inicio</title>
+    <title>Menú Principal</title>
     <style>
+        /* Estilos básicos */
         body {
             font-family: Arial, sans-serif;
             background-color: #f4f4f9;
@@ -16,12 +17,6 @@
         }
 
         .container {
-            background-color: #ffffff;
-            padding: 20px 30px;
-            border-radius: 8px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-            max-width: 400px;
-            width: 100%;
             text-align: center;
         }
 
@@ -31,50 +26,132 @@
             margin-bottom: 20px;
         }
 
-        .button-group {
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-            margin-top: 20px;
-        }
-
-        .button-group button {
+        .button {
+            margin: 10px;
+            padding: 10px 20px;
+            font-size: 1.2em;
+            color: white;
             background-color: #5a67d8;
-            color: #fff;
             border: none;
             border-radius: 4px;
-            padding: 10px;
-            font-size: 1em;
-            font-weight: bold;
             cursor: pointer;
-            transition: background-color 0.3s;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
             width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            justify-content: center;
+            align-items: center;
         }
 
-        .button-group button:active {
-            background-color: #4c51bf;
-            transform: scale(0.98);
+        .modal-content {
+            background: #fff;
+            padding: 20px;
+            border-radius: 5px;
+            width: 80%;
+            max-width: 500px;
+            text-align: center;
         }
 
-        /* Media Query para pantallas más grandes */
-        @media(min-width: 600px) {
-            .button-group {
-                flex-direction: row;
-                justify-content: space-between;
-            }
-            .button-group button {
-                width: 48%;
-            }
+        .close {
+            float: right;
+            cursor: pointer;
+            font-size: 1.5em;
+        }
+
+        .result-item {
+            padding: 8px;
+            cursor: pointer;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .result-item:hover, .selected {
+            background-color: #cce5ff;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Opciones</h1>
-        <div class="button-group">
-            <button onclick="window.location.href='/formulario_manual'">Cargar Producto Manual</button>
-            <button onclick="window.location.href='/buscar_productos'">Buscar Productos</button>
+        <h1>Menú Principal</h1>
+        <button class="button" onclick="abrirModal()">Interdepósito Manual</button>
+        <button class="button" onclick="window.location.href='/buscar_productos'">Buscar Productos</button>
+        <button class="button" onclick="window.location.href='/formulario_manual'">Ingresar Producto Manual</button>
+    </div>
+
+    <!-- Modal de Búsqueda -->
+    <div id="modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="cerrarModal()">&times;</span>
+            <h2>Buscar Producto para Interdepósito</h2>
+            <label for="search-description">Buscar por descripción:</label>
+            <input type="text" id="search-description" oninput="buscarProducto()">
+            <div id="resultados"></div>
+            <button class="button" id="aceptar" onclick="aceptarSeleccion()" disabled>Aceptar</button>
         </div>
     </div>
+
+    <script>
+        let productoSeleccionado = null;
+
+        function abrirModal() {
+            document.getElementById("modal").style.display = "flex";
+        }
+
+        function cerrarModal() {
+            document.getElementById("modal").style.display = "none";
+            document.getElementById("search-description").value = "";
+            document.getElementById("resultados").innerHTML = "";
+            productoSeleccionado = null;
+            document.getElementById("aceptar").disabled = true;
+        }
+
+        function buscarProducto() {
+            const searchText = document.getElementById("search-description").value.toLowerCase();
+            fetch(`/buscar_producto_interdeposito?query=${encodeURIComponent(searchText)}`)
+                .then(response => response.json())
+                .then(data => {
+                    const resultadosContainer = document.getElementById("resultados");
+                    resultadosContainer.innerHTML = "";  // Limpiar resultados previos
+
+                    if (data.productos.length > 0) {
+                        data.productos.forEach(producto => {
+                            const item = document.createElement("div");
+                            item.classList.add("result-item");
+                            item.textContent = `${producto.descripcion} (Código Interno: ${producto.codigo_interno})`;
+                            item.onclick = () => seleccionarProducto(producto, item);
+                            resultadosContainer.appendChild(item);
+                        });
+                    } else {
+                        resultadosContainer.innerHTML = "<p>No se encontraron resultados.</p>";
+                    }
+                })
+                .catch(error => {
+                    console.error("Error en la búsqueda:", error);
+                    document.getElementById("resultados").innerHTML = "<p>Error al buscar productos.</p>";
+                });
+        }
+
+        function seleccionarProducto(producto, item) {
+            // Marcar visualmente el producto seleccionado
+            document.querySelectorAll(".result-item").forEach(el => el.classList.remove("selected"));
+            item.classList.add("selected");
+            productoSeleccionado = producto;
+            document.getElementById("aceptar").disabled = false;
+        }
+
+        function aceptarSeleccion() {
+            if (productoSeleccionado) {
+                const codigoInterno = productoSeleccionado.codigo_interno;
+                cerrarModal();
+                // Redirigir a la página de interdepósito manual con el código interno seleccionado
+                window.location.href = `/interdeposito_manual?codigo_interno=${codigoInterno}`;
+            }
+        }
+    </script>
 </body>
 </html>
