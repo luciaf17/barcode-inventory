@@ -1,123 +1,8 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Buscar Productos</title>
-    <style>
-        /* Estilos generales */
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #f4f4f9;
-            margin: 0;
-            padding: 20px;
-        }
+{% extends "base.html" %}
 
-        h1 {
-            color: #333;
-            text-align: center;
-            font-size: 1.8em;
-            margin-bottom: 20px;
-        }
+{% block title %}Buscar Productos{% endblock %}
 
-        .table-container {
-            width: 100%;
-            overflow-x: auto;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-
-        th, td {
-            padding: 10px;
-            text-align: left;
-            border: 1px solid #ddd;
-        }
-
-        th {
-            background-color: #5a67d8;
-            color: white;
-        }
-
-        /* Estilos para el campo de búsqueda y filtros */
-        .filters {
-            margin-bottom: 15px;
-            display: flex;
-            gap: 15px;
-            justify-content: center;
-            flex-wrap: wrap;
-        }
-
-        .filters input,
-        .filters select {
-            padding: 8px;
-            font-size: 1em;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-        }
-
-        .action-buttons {
-            display: flex;
-            gap: 10px;
-        }
-
-        .action-buttons button {
-            padding: 5px 10px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            transition: background-color 0.3s;
-        }
-
-        .edit {
-            background-color: #4caf50;
-            color: white;
-        }
-
-        .delete {
-            background-color: #e53e3e;
-            color: white;
-        }
-
-        .clear-filters {
-            background-color: #e53e3e;
-            color: white;
-        }
-
-        /* Botones de navegación */
-        button {
-            margin: 10px;
-            padding: 8px 16px;
-            font-size: 1em;
-            cursor: pointer;
-            background-color: #5a67d8;
-            color: #ffffff;
-            border: none;
-            border-radius: 4px;
-            transition: background-color 0.3s;
-        }
-
-        button:hover {
-            background-color: #4c51bf;
-        }
-
-        /* Media Query para pantallas pequeñas */
-        @media (max-width: 600px) {
-            .action-buttons {
-                flex-direction: column;
-            }
-        }
-
-        .editable {
-            background-color: #f4f4f4;
-            border: 1px solid #ddd;
-            padding: 5px;
-        }
-    </style>
-</head>
-<body>
+{% block content %}
     <button onclick="window.location.href='/'" style="margin: 10px; padding: 8px 16px; font-size: 1em; cursor: pointer;">
         Volver al Inicio
     </button>
@@ -135,17 +20,24 @@
             {% endfor %}
         </select>
 
-        <select id="filtro_estanteria">
-            <option value="">Filtrar por Estantería</option>
-            {% for estanteria in estanterias %}
-                <option value="{{ estanteria }}" {% if filtro_estanteria == estanteria %}selected{% endif %}>{{ estanteria }}</option>
+        <select id="filtro_pasillo">
+            <option value="">Filtrar por Pasillo</option>
+            {% for pasillo in pasillos %}
+                <option value="{{ pasillo }}" {% if filtro_pasillo == pasillo %}selected{% endif %}>{{ pasillo }}</option>
             {% endfor %}
         </select>
 
-        <select id="filtro_locacion">
-            <option value="">Filtrar por Locación</option>
-            {% for locacion in locaciones %}
-                <option value="{{ locacion }}" {% if filtro_locacion == locacion %}selected{% endif %}>{{ locacion }}</option>
+        <select id="filtro_columna">
+            <option value="">Filtrar por Columna</option>
+            {% for columna in columnas %}
+                <option value="{{ columna }}" {% if filtro_columna == columna %}selected{% endif %}>{{ columna }}</option>
+            {% endfor %}
+        </select>
+
+        <select id="filtro_estante">
+            <option value="">Filtrar por Estante</option>
+            {% for estante in estantes %}
+                <option value="{{ estante }}" {% if filtro_estante == estante %}selected{% endif %}>{{ estante }}</option>
             {% endfor %}
         </select>
 
@@ -159,12 +51,13 @@
             <thead>
                 <tr>
                     <th>Código Interno</th>
-                    <th>Código</th>
+                    <th>Barcode</th>
                     <th>Descripción</th>
                     <th>Cantidad</th>
                     <th>Depósito</th>
-                    <th>Estantería</th>
-                    <th>Locación</th>
+                    <th>Pasillo</th>
+                    <th>Columna</th>
+                    <th>Estante</th>
                     <th>Acciones</th>
                 </tr>
             </thead>
@@ -176,8 +69,9 @@
                     <td contenteditable="false" class="editable">{{ producto['descripcion'] }}</td>
                     <td contenteditable="false" class="editable">{{ producto['cantidad'] }}</td>
                     <td contenteditable="false" class="editable">{{ producto['deposito'] }}</td>
-                    <td contenteditable="false" class="editable">{{ producto['estanteria'] }}</td>
-                    <td contenteditable="false" class="editable">{{ producto['locacion'] }}</td>
+                    <td contenteditable="false" class="editable">{{ producto['pasillo'] }}</td>
+                    <td contenteditable="false" class="editable">{{ producto['columna'] }}</td>
+                    <td contenteditable="false" class="editable">{{ producto['estante'] }}</td>
                     <td class="action-buttons">
                         <button class="edit" onclick="habilitarEdicion(this)">Editar</button>
                         <button class="save" onclick="guardarProducto(this)" style="display: none;">Guardar</button>
@@ -203,21 +97,25 @@
             <button onclick="navigatePage({{ page + 1 }})">Siguiente</button>
         {% endif %}
     </div>
+{% endblock %}
 
+{% block scripts %}
     <script>
         function applyFilters() {
             const searchCodigo = document.getElementById("search_codigo").value;
             const searchDescripcion = document.getElementById("search_descripcion").value;
             const filtroDeposito = document.getElementById("filtro_deposito").value;
-            const filtroEstanteria = document.getElementById("filtro_estanteria").value;
-            const filtroLocacion = document.getElementById("filtro_locacion").value;
+            const filtroPasillo = document.getElementById("filtro_pasillo").value;
+            const filtroColumna = document.getElementById("filtro_columna").value;
+            const filtroEstante = document.getElementById("filtro_estante").value;
 
             const params = new URLSearchParams({
                 search_codigo: searchCodigo,
                 search_descripcion: searchDescripcion,
                 filtro_deposito: filtroDeposito,
-                filtro_estanteria: filtroEstanteria,
-                filtro_locacion: filtroLocacion
+                filtro_pasillo: filtroPasillo,
+                filtro_columna: filtroColumna,
+                filtro_estante: filtroEstante
             });
 
             window.location.href = `/buscar_productos?${params.toString()}`;
@@ -239,8 +137,8 @@
                 cell.contentEditable = "true";
                 cell.style.backgroundColor = "#fff";
             });
-            button.style.display = "none";  // Oculta el botón Editar
-            row.querySelector(".save").style.display = "inline";  // Muestra el botón Guardar
+            button.style.display = "none";
+            row.querySelector(".save").style.display = "inline";
         }
 
         function guardarProducto(button) {
@@ -249,10 +147,10 @@
             const descripcion = row.cells[2].innerText;
             const cantidad = row.cells[3].innerText;
             const deposito = row.cells[4].innerText;
-            const estanteria = row.cells[5].innerText;
-            const locacion = row.cells[6].innerText;
+            const pasillo = row.cells[5].innerText;
+            const columna = row.cells[6].innerText;
+            const estante = row.cells[7].innerText;
 
-            // Realiza una solicitud POST para actualizar el producto
             fetch(`/editar_producto`, {
                 method: 'POST',
                 headers: {
@@ -263,8 +161,9 @@
                     descripcion: descripcion,
                     cantidad: cantidad,
                     deposito: deposito,
-                    estanteria: estanteria,
-                    locacion: locacion
+                    pasillo: pasillo,
+                    columna: columna,
+                    estante: estante
                 })
             })
             .then(response => response.json())
@@ -279,13 +178,12 @@
                 console.error("Error al actualizar el producto:", error);
             });
 
-            // Deshabilita la edición y ajusta los estilos
             row.querySelectorAll(".editable").forEach(cell => {
                 cell.contentEditable = "false";
                 cell.style.backgroundColor = "#f4f4f4";
             });
-            button.style.display = "none";  // Oculta el botón Guardar
-            row.querySelector(".edit").style.display = "inline";  // Muestra el botón Editar
+            button.style.display = "none";
+            row.querySelector(".edit").style.display = "inline";
         }
 
         function eliminarProducto(codigoInterno) {
@@ -306,5 +204,4 @@
             });
         }
     </script>
-</body>
-</html>
+{% endblock %}

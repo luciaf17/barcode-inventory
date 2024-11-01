@@ -9,6 +9,10 @@ __pycache__/
 *.pyd
 .Python
 
+cert.pem
+key.pem
+
+
 # Archivos de configuración de PyInstaller
 *.spec
 dist/

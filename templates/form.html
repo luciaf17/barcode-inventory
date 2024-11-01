@@ -4,84 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ingresar datos de producto</title>
-    <style>
-        /* Estilos generales */
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #f4f4f9;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-        }
-
-        .form-container {
-            background-color: #ffffff;
-            padding: 20px 30px;
-            border-radius: 8px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-            max-width: 400px;
-            width: 100%;
-            text-align: center;
-        }
-
-        h1 {
-            color: #333;
-            font-size: 1.8em;
-            margin-bottom: 20px;
-        }
-
-        label {
-            font-weight: bold;
-            color: #555;
-            display: block;
-            margin-top: 15px;
-        }
-
-        input[type="number"],
-        input[type="text"],
-        select {
-            width: 100%;
-            padding: 10px;
-            margin-top: 5px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            box-sizing: border-box;
-            font-size: 1em;
-            transition: border-color 0.3s;
-        }
-
-        .submit-button {
-            background-color: #5a67d8;
-            color: #fff;
-            border: none;
-            border-radius: 4px;
-            padding: 10px 15px;
-            font-size: 1em;
-            font-weight: bold;
-            cursor: pointer;
-            margin-top: 20px;
-            width: 100%;
-            transition: background-color 0.3s, transform 0.1s;
-        }
-
-        #message-container {
-            margin-top: 20px;
-            font-size: 1em;
-            color: #333;
-        }
-
-        #message-container.error {
-            color: red;
-        }
-
-        #message-container.success {
-            color: green;
-        }
-    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
-<body>
+<body class="formularios">
     <div class="form-container">
         <h1>Ingresar datos de producto</h1>
         <form id="data-form">
@@ -97,17 +22,24 @@
                 {% endfor %}
             </select>
 
-            <label for="estanteria">Estantería:</label>
-            <select id="estanteria" name="estanteria" required>
-                {% for estanteria in estanterias %}
-                    <option value="{{ estanteria }}" {% if loop.first %}selected{% endif %}>{{ estanteria }}</option>
+            <label for="pasillo">Pasillo:</label>
+            <select id="pasillo" name="pasillo" required>
+                {% for pasillo in pasillos %}
+                    <option value="{{ pasillo }}" {% if loop.first %}selected{% endif %}>{{ pasillo }}</option>
                 {% endfor %}
             </select>
 
-            <label for="locacion">Locación:</label>
-            <select id="locacion" name="locacion" required>
-                {% for locacion in locaciones %}
-                    <option value="{{ locacion }}" {% if loop.first %}selected{% endif %}>{{ locacion }}</option>
+            <label for="columna">Columna:</label>
+            <select id="columna" name="columna" required>
+                {% for columna in columnas %}
+                    <option value="{{ columna }}" {% if loop.first %}selected{% endif %}>{{ columna }}</option>
+                {% endfor %}
+            </select>
+
+            <label for="estante">Estante:</label>
+            <select id="estante" name="estante" required>
+                {% for estante in estantes %}
+                    <option value="{{ estante }}" {% if loop.first %}selected{% endif %}>{{ estante }}</option>
                 {% endfor %}
             </select>
 
@@ -125,57 +57,48 @@
 
     <script>
         document.addEventListener("DOMContentLoaded", function() {
-            // Asigna el valor por defecto a los campos si están vacíos
-            if (!document.getElementById("deposito").value) {
-                document.getElementById("deposito").selectedIndex = 1;
-            }
-            if (!document.getElementById("estanteria").value) {
-                document.getElementById("estanteria").selectedIndex = 1; 
-            }
-            if (!document.getElementById("locacion").value) {
-                document.getElementById("locacion").selectedIndex = 1; 
+            const urlParams = new URLSearchParams(window.location.search);
+            const code = urlParams.get('code');
+            document.getElementById('code').value = code || ""; 
+
+            if (code) {
+                const depositoOriginal = document.getElementById("deposito").value;
+                const pasilloOriginal = document.getElementById("pasillo").value;
+                const columnaOriginal = document.getElementById("columna").value;
+                const estanteOriginal = document.getElementById("estante").value;
+
+                fetch(`/verificar_producto?code=${code}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.producto) {
+                            document.getElementById("cantidad").value = data.producto.cantidad || "";
+                            document.getElementById("deposito").value = data.producto.deposito || depositoOriginal;
+                            document.getElementById("pasillo").value = data.producto.pasillo || pasilloOriginal;
+                            document.getElementById("columna").value = data.producto.columna || columnaOriginal;
+                            document.getElementById("estante").value = data.producto.estante || estanteOriginal;
+                            document.getElementById("descripcion").value = data.producto.descripcion || "";
+                        }
+                    });
             }
         });
-    
-        const urlParams = new URLSearchParams(window.location.search);
-        const code = urlParams.get('code');
-        document.getElementById('code').value = code || ""; 
-    
-        if (code) {
-            // Guarda valores actuales para no reemplazarlos innecesariamente
-            const depositoOriginal = document.getElementById("deposito").value;
-            const estanteriaOriginal = document.getElementById("estanteria").value;
-            const locacionOriginal = document.getElementById("locacion").value;
-    
-            fetch(`/verificar_producto?code=${code}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.producto) {
-                        document.getElementById("cantidad").value = data.producto.cantidad || "";
-                        document.getElementById("deposito").value = data.producto.deposito || depositoOriginal;
-                        document.getElementById("estanteria").value = data.producto.estanteria || estanteriaOriginal;
-                        document.getElementById("locacion").value = data.producto.locacion || locacionOriginal;
-                        document.getElementById("descripcion").value = data.producto.descripcion || "";
-                    }
-                });
-        }
-    
+
         document.getElementById('data-form').addEventListener('submit', function(e) {
             e.preventDefault();
             const code = document.getElementById("code").value;
             const cantidad = document.getElementById("cantidad").value;
             const deposito = document.getElementById("deposito").value;
-            const estanteria = document.getElementById("estanteria").value;
-            const locacion = document.getElementById("locacion").value;
+            const pasillo = document.getElementById("pasillo").value;
+            const columna = document.getElementById("columna").value;
+            const estante = document.getElementById("estante").value;
             const descripcion = document.getElementById("descripcion").value;
             const messageContainer = document.getElementById("message-container");
-    
+
             fetch('/agregar', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ code, cantidad, deposito, estanteria, locacion, descripcion })
+                body: JSON.stringify({ code, cantidad, deposito, pasillo, columna, estante, descripcion })
             })
             .then(response => response.json())
             .then(data => {
@@ -195,6 +118,5 @@
             });
         });
     </script>
-    
 </body>
 </html>
