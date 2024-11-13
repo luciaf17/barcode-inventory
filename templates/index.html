@@ -17,7 +17,7 @@
             <h2>Buscar Producto para Interdepósito</h2>
             <label for="search-description">Buscar por descripción:</label>
             <input type="text" id="search-description" oninput="buscarProducto()">
-            <div id="resultados"></div>
+            <div id="resultados" class="suggestions-list"></div>
             <button class="button" id="aceptar" onclick="aceptarSeleccion()" disabled>Aceptar</button>
         </div>
     </div>
@@ -41,6 +41,11 @@
 
         function buscarProducto() {
             const searchText = document.getElementById("search-description").value.toLowerCase();
+            if (searchText.length < 2) {
+                document.getElementById("resultados").innerHTML = "<p>Escribe al menos 2 caracteres.</p>";
+                return;
+            }
+
             fetch(`/buscar_producto_interdeposito?query=${encodeURIComponent(searchText)}`)
                 .then(response => response.json())
                 .then(data => {
@@ -66,7 +71,6 @@
         }
 
         function seleccionarProducto(producto, item) {
-            // Marcar visualmente el producto seleccionado
             document.querySelectorAll(".result-item").forEach(el => el.classList.remove("selected"));
             item.classList.add("selected");
             productoSeleccionado = producto;
@@ -77,7 +81,6 @@
             if (productoSeleccionado) {
                 const codigoInterno = productoSeleccionado.codigo_interno;
                 cerrarModal();
-                // Redirigir a la página de interdepósito manual con el código interno seleccionado
                 window.location.href = `/interdeposito_manual?codigo_interno=${codigoInterno}`;
             }
         }

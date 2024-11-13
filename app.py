@@ -19,7 +19,7 @@ app = Flask(__name__, static_folder='static')
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 app.secret_key = 'your_secret_key'  # Cambia esto a algo seguro en producción
-app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=30)  # Establece el tiempo de sesión (ejemplo: 30 minutos)
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=365*100)  # Dura 100 años
 
 # Configuración de credenciales de Google Sheets y hojas
 scopes = ["https://spreadsheets.google.com/feeds", 'https://www.googleapis.com/auth/spreadsheets',
@@ -37,35 +37,38 @@ interdeposito_sheet = client.open_by_key('1GRtJhJitw1nY4U8ZcNDJozIeMU5yMa_0pfw4h
 stock_sheet = client.open_by_key('1GRtJhJitw1nY4U8ZcNDJozIeMU5yMa_0pfw4hCED-hk').worksheet("Stock")
 usuarios_sheet = client.open_by_key('1GRtJhJitw1nY4U8ZcNDJozIeMU5yMa_0pfw4hCED-hk').worksheet("Usuarios")
 
-# Definir el decorador login_required
-def login_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if 'username' not in session:
-            return redirect(url_for('login', next=request.url))
-        return f(*args, **kwargs)
-    return decorated_function
 
 
 def obtener_opciones(worksheet):
     return [row[0] for row in worksheet.get_all_values()]
 
+import random
+
+logger = logging.getLogger(__name__)
+
 def obtener_datos_de_google(codigo):
-    url = f"https://www.google.com/search?q={codigo}"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"
-    }
-    response = requests.get(url, headers=headers)
+    api_key = "AIzaSyCj_8KdMBBWdlCZwZUD59LbuXC0m-Qkbis"  # Reemplaza con tu clave de API
+    search_engine_id = "c2fe79724f3994723"  # Reemplaza con el ID de tu motor de búsqueda
+
+    url = f"https://www.googleapis.com/customsearch/v1?q={codigo}&key={api_key}&cx={search_engine_id}"
+    response = requests.get(url)
+
     if response.status_code == 200:
-        soup = BeautifulSoup(response.content, 'html.parser')
-        titulo = soup.find('h3')
-        titulo_texto = titulo.text if titulo else None
-        if titulo_texto:
-            titulo_texto = re.split(r' - | \(|\[|\{', titulo_texto)[0].strip()
+        data = response.json()
+        
+        # Obtén el título del primer resultado
+        if "items" in data and len(data["items"]) > 0:
+            titulo = data["items"][0]["title"]
+            # Limpia el título eliminando cualquier información extra después de ciertos caracteres
+            titulo_texto = re.split(r' - | \(|\[|\{', titulo)[0].strip()
             titulo_texto = titulo_texto.capitalize()
-        return titulo_texto
+            return titulo_texto
+        else:
+            return "Artículo no encontrado"
     else:
-        return None
+        print(f"Error en la búsqueda: {response.status_code}")
+        return "Error en la búsqueda"
+
     
 def verificar_descripcion_existente(descripcion):
     celdas = sheet.get_all_values()
@@ -112,7 +115,6 @@ def verificar_producto():
         }}), 200
 
 @app.route('/ingresar_datos')
-@login_required
 def ingresar_datos():
     depositos = obtener_opciones(depositos_sheet)
     pasillos = obtener_opciones(pasillos_sheet)
@@ -122,7 +124,6 @@ def ingresar_datos():
 
 
 @app.route('/formulario_manual')
-@login_required
 def formulario_manual():
     depositos = obtener_opciones(depositos_sheet)
     pasillos = obtener_opciones(pasillos_sheet)
@@ -148,7 +149,6 @@ def eliminar_producto():
     return jsonify({"success": False, "error": "Producto no encontrado"}), 404
 
 @app.route('/editar_producto', methods=['POST'])
-@login_required
 def editar_producto():
     data = request.get_json()
     codigo_interno = data.get('codigo_interno')
@@ -174,7 +174,6 @@ def editar_producto():
     return jsonify({"success": False, "error": "Producto no encontrado"}), 404
 
 @app.route('/buscar_productos')
-@login_required
 def buscar_productos():
     page = request.args.get('page', 1, type=int)
     per_page = 25
@@ -187,10 +186,13 @@ def buscar_productos():
 
     productos_raw = sheet.get_all_records()
 
+    # Divide la descripción de búsqueda en palabras clave
+    descripcion_palabras = search_descripcion.split()
+
     productos_filtrados = [
         producto for producto in productos_raw
         if (search_codigo in str(producto.get("Codigo", "")).lower()) and
-           (search_descripcion in producto.get("Titulo", "").lower())
+           all(palabra in producto.get("Titulo", "").lower() for palabra in descripcion_palabras)
     ]
 
     # Aplicar filtros adicionales
@@ -257,27 +259,25 @@ def buscar_producto_interdeposito():
     query = request.args.get('query', '').lower()
     productos_raw = sheet.get_all_records()
 
-    # Añade un print para depuración y revisar la estructura de productos_raw
-    print("productos_raw:", productos_raw)
+    # Divide la consulta en palabras clave
+    keywords = query.split()
 
-    # Filtrar productos que coincidan con la descripción
+    # Filtrar productos que coincidan con todas las palabras clave
     productos = [
         {
             "codigo_interno": producto.get("Codigo_interno") or producto.get("codigo_interno"),
             "codigo": producto.get("Codigo") or producto.get("codigo"),
             "descripcion": producto.get("Titulo") or producto.get("titulo")
         }
-        for producto in productos_raw if query in producto.get("Titulo", "").lower() or query in producto.get("titulo", "").lower()
+        for producto in productos_raw
+        if all(keyword in (producto.get("Titulo", "").lower() or producto.get("titulo", "").lower()) for keyword in keywords)
     ]
-
-    # Añade otro print para ver cómo se han estructurado los productos después del filtrado
-    print("productos encontrados:", productos)
 
     return jsonify({"productos": productos})
 
 
+
 @app.route('/interdeposito_manual')
-@login_required
 def interdeposito_manual():
     codigo_interno = request.args.get('codigo_interno')
     print("Código interno recibido en /interdeposito_manual:", codigo_interno)
@@ -379,7 +379,6 @@ def agregar_manual():
         
 
 @app.route('/opciones')
-@login_required
 def opciones():
     codigo = request.args.get('code')
     print("Código recibido en /opciones:", codigo)  # Esto imprimirá el código en la consola
@@ -394,7 +393,6 @@ def opciones():
 
 # Ruta para el formulario de Interdeposito
 @app.route('/interdeposito')
-@login_required
 def interdeposito():
     codigo = request.args.get('code')  # Captura el código desde la URL
     print("Código recibido en /interdeposito:", codigo)  # Verificar en consola
@@ -440,19 +438,26 @@ def obtener_usuarios():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    # Captura la URL original completa desde donde se solicitó el login
+    next_url = request.args.get('next') or request.referrer  # Usa 'next' o, si no, la URL de referencia
+
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
-        usuarios = obtener_usuarios()  # Obteniendo usuarios desde la hoja de cálculo (diccionario con hashes)
+        usuarios = obtener_usuarios()  # Diccionario de usuarios con contraseñas hasheadas
 
         if username in usuarios and check_password_hash(usuarios[username], password):
             session['username'] = username  # Establecer el nombre de usuario en la sesión
             session.permanent = True
-            return redirect(url_for('index'))
-        else:
-            return render_template('login.html', error_message="Credenciales incorrectas")
-    return render_template('login.html')
 
+            # Redirige a la URL original (con parámetros) o al índice
+            return redirect(next_url or url_for('index'))
+        else:
+            # Muestra mensaje de error si las credenciales no son correctas
+            return render_template('login.html', error_message="Credenciales incorrectas", next=next_url)
+    
+    # Renderiza la página de login y pasa la URL original al formulario
+    return render_template('login.html', next=next_url)
 
 
 # Ruta de cierre de sesión
@@ -461,28 +466,11 @@ def logout():
     session.pop('username', None)
     return redirect(url_for('login'))
 
-# Decorador para proteger rutas que requieran autenticación
-from functools import wraps
-def login_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if 'username' not in session:
-            return redirect(url_for('login'))
-        return f(*args, **kwargs)
-    return decorated_function
 
 # Ruta principal protegida
 @app.route('/')
-@login_required
 def index():
     return render_template('index.html')
-
-@app.before_request
-def require_login():
-    # Rutas que no necesitan autenticación
-    allowed_routes = ['login', 'logout', 'static']
-    if 'username' not in session and request.endpoint not in allowed_routes:
-        return redirect(url_for('login', next=request.url))
 
 
 if __name__ == '__main__':

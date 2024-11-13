@@ -12,7 +12,8 @@
             <img src="{{ url_for('static', filename='wouchuk-logo.png') }}" alt="Logo Wouchuk" class="logo-login">
         </div>
         <h1>Iniciar Sesión</h1>
-        <form action="/login" method="POST">
+        <form method="POST" action="{{ url_for('login', next=next) }}">
+            <input type="hidden" name="next" value="{{ next }}">
             <label for="username">Usuario:</label>
             <input type="text" id="username" name="username" required>
 

@@ -1,32 +1,35 @@
-from tkinter import Tk, Label
-import webbrowser
+from waitress import serve
+from app import app  # Asegúrate de que 'app' es el nombre de tu instancia de Flask
+import logging
+import socket
 import time
 import threading
-import socket
+import webbrowser
+from tkinter import Tk, Label
 
 def get_local_ip():
     """Obtiene la dirección IP local de la máquina."""
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
+        # Intenta obtener la IP local mediante una conexión simulada
         s.connect(("8.8.8.8", 80))
         ip = s.getsockname()[0]
     except Exception:
-        ip = "127.0.0.1"
+        ip = "127.0.0.1"  # En caso de error, usa la IP de localhost
     finally:
         s.close()
     return ip
 
-def open_browser():
-    # Espera un momento para dar tiempo a la ventana de Tkinter de aparecer
+def open_browser(ip_address):
+    """Espera un momento y abre el navegador con la URL de la aplicación."""
     time.sleep(2)
-    # Abre el navegador con la dirección IP local
-    webbrowser.open(f"http://{get_local_ip()}:5000")
+    webbrowser.open(f"http://{ip_address}:5000")
     # Cierra la ventana de carga después de abrir el navegador
     loading_window.destroy()
 
 def show_loading_window():
+    """Muestra una ventana de carga mientras se abre la aplicación."""
     global loading_window
-    # Crear una ventana de Tkinter
     loading_window = Tk()
     loading_window.title("Cargando")
     loading_window.geometry("200x100")
@@ -41,8 +44,18 @@ def show_loading_window():
     # Iniciar el ciclo de eventos de la ventana
     loading_window.mainloop()
 
-# Ejecuta la ventana de carga en un hilo separado
-threading.Thread(target=show_loading_window).start()
+if __name__ == '__main__':
+    # Configura el logging para información de servidor
+    logging.basicConfig(level=logging.INFO)
+    
+    ip_address = get_local_ip()
+    print(f"Starting server on http://{ip_address}:5000")
 
-# Ejecuta la función para abrir el navegador en el hilo principal
-open_browser()
+    # Ejecuta la ventana de carga en un hilo separado
+    threading.Thread(target=show_loading_window).start()
+
+    # Ejecuta la función para abrir el navegador en el hilo principal
+    threading.Thread(target=open_browser, args=(ip_address,)).start()
+
+    # Inicia el servidor Waitress en el puerto 5000
+    serve(app, host='0.0.0.0', port=5000)

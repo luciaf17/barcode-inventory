@@ -358,3 +358,19 @@ input[type="number"],
     height: 100vh;
     margin: 0;
 }
+
+/*index.html*/
+
+.result-item {
+    padding: 5px;
+    cursor: pointer;
+}
+.result-item:hover, .result-item.selected {
+    background-color: #d3d3d3;
+}
+.suggestions-list {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid #ccc;
+    margin-top: 10px;
+}
