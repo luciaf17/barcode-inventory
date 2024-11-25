@@ -73,7 +73,7 @@ def obtener_datos_de_google(codigo):
 def verificar_descripcion_existente(descripcion):
     celdas = sheet.get_all_values()
     for i, fila in enumerate(celdas):
-        if fila[2].strip().lower() == descripcion.strip().lower():  # Compara por descripción
+        if fila[11].strip().lower() == descripcion.strip().lower():  # Compara por descripción
             return i + 1, fila  # Devuelve el índice de la fila y los datos existentes
     return None, None
 
@@ -85,7 +85,7 @@ def verificar_codigo_existente(codigo):
             return i + 1, {
                 "codigo_interno": fila[0],
                 "codigo": fila[1],
-                "descripcion": fila[2],
+                "descripcion": fila[11],
                 "cantidad": fila[3],
                 "deposito": fila[4],
                 "pasillo": fila[5],
@@ -114,14 +114,39 @@ def verificar_producto():
             "estante": ""
         }}), 200
 
+# Agrega una función en tu backend para obtener los datos del último producto
+def obtener_ultimo_producto():
+    productos = sheet.get_all_records()  # Obtiene todos los registros
+    if productos:
+        ultimo_producto = productos[-1]  # Obtiene el último producto
+        
+        # Limpia el campo 'estante' si existe y comienza con un apóstrofe o comilla
+        if "estante" in ultimo_producto:
+            ultimo_producto["estante"] = str(ultimo_producto["estante"]).strip("'\"")
+        
+        return ultimo_producto
+    return None
+
+
 @app.route('/ingresar_datos')
 def ingresar_datos():
+    # Obtener opciones para los selects
     depositos = obtener_opciones(depositos_sheet)
     pasillos = obtener_opciones(pasillos_sheet)
     columnas = obtener_opciones(columnas_sheet)
     estantes = obtener_opciones(estantes_sheet)
-    return render_template('form.html', depositos=depositos, pasillos=pasillos, columnas=columnas, estantes=estantes)
+    
+    # Obtener el último producto
+    ultimo_producto = obtener_ultimo_producto()
 
+    return render_template(
+        'form.html', 
+        depositos=depositos, 
+        pasillos=pasillos, 
+        columnas=columnas, 
+        estantes=estantes,
+        ultimo_producto=ultimo_producto  # Pasar el último producto a la plantilla
+    )
 
 @app.route('/formulario_manual')
 def formulario_manual():
@@ -177,45 +202,62 @@ def editar_producto():
 def buscar_productos():
     page = request.args.get('page', 1, type=int)
     per_page = 25
-    search_codigo = request.args.get('search_codigo', '').lower()
-    search_descripcion = request.args.get('search_descripcion', '').lower()
-    filtro_deposito = request.args.get('filtro_deposito', '')
-    filtro_pasillo = request.args.get('filtro_pasillo', '')
-    filtro_columna = request.args.get('filtro_columna', '')
-    filtro_estante = request.args.get('filtro_estante', '')
+    search_codigo = str(request.args.get('search_codigo', '')).strip().lower()
+    search_descripcion = str(request.args.get('search_descripcion', '')).strip().lower()
+    filtro_deposito = str(request.args.get('filtro_deposito', '')).strip().lower()
+    filtro_pasillo = str(request.args.get('filtro_pasillo', '')).strip().lower()
+    filtro_columna = str(request.args.get('filtro_columna', '')).strip().lower()
+    filtro_estante = str(request.args.get('filtro_estante', '')).strip().lower()
 
     productos_raw = sheet.get_all_records()
 
     # Divide la descripción de búsqueda en palabras clave
     descripcion_palabras = search_descripcion.split()
 
+    # Filtrado inicial según el código y descripción
     productos_filtrados = [
         producto for producto in productos_raw
-        if (search_codigo in str(producto.get("Codigo", "")).lower()) and
-           all(palabra in producto.get("Titulo", "").lower() for palabra in descripcion_palabras)
+        if (search_codigo in str(producto.get("Codigo", "")).strip().lower()) and
+           all(palabra in str(producto.get("Desc Concatenada", "")).strip().lower() for palabra in descripcion_palabras)
     ]
 
-    # Aplicar filtros adicionales
+    # Aplicar filtros adicionales y normalizar valores
     if filtro_deposito:
-        productos_filtrados = [producto for producto in productos_filtrados if producto.get("deposito") == filtro_deposito]
+        productos_filtrados = [
+            producto for producto in productos_filtrados
+            if str(producto.get("deposito", "")).strip().lower() == filtro_deposito
+        ]
     if filtro_pasillo:
-        productos_filtrados = [producto for producto in productos_filtrados if producto.get("pasillo") == filtro_pasillo]
+        productos_filtrados = [
+            producto for producto in productos_filtrados
+            if str(producto.get("pasillo", "")).strip().lower() == filtro_pasillo
+        ]
     if filtro_columna:
-        productos_filtrados = [producto for producto in productos_filtrados if producto.get("columna") == filtro_columna]
+        productos_filtrados = [
+            producto for producto in productos_filtrados
+            if str(producto.get("columna", "")).strip().lower() == filtro_columna
+        ]
     if filtro_estante:
-        productos_filtrados = [producto for producto in productos_filtrados if producto.get("estante") == filtro_estante]
+        productos_filtrados = [
+            producto for producto in productos_filtrados
+            if str(producto.get("estante", "")).strip().lower() == filtro_estante
+        ]
 
+    # Paginación y preparación de los datos para renderizar
     total_products = len(productos_filtrados)
     total_pages = math.ceil(total_products / per_page)
     start = (page - 1) * per_page
     end = start + per_page
     productos_paginados = productos_filtrados[start:end]
+    # Cálculo de la paginación
+    start_page = max(page - 8, 1)
+    end_page = min(page + 8, total_pages)
 
     productos = [
         {
             "Codigo_interno": producto.get("Codigo_interno"),
             "Codigo": producto.get("Codigo"),
-            "descripcion": producto.get("Titulo"),
+            "descripcion": producto.get("Desc Concatenada"),
             "cantidad": producto.get("cantidad"),
             "deposito": producto.get("deposito"),
             "pasillo": producto.get("pasillo"),
@@ -225,6 +267,7 @@ def buscar_productos():
         for producto in productos_paginados
     ]
 
+    # Obtener opciones de filtros
     depositos = obtener_opciones(depositos_sheet)
     pasillos = obtener_opciones(pasillos_sheet)
     columnas = obtener_opciones(columnas_sheet)
@@ -240,6 +283,8 @@ def buscar_productos():
         page=page,
         total_pages=total_pages,
         search_codigo=search_codigo,
+        start_page=start_page,  # Pasar estos valores al template
+        end_page=end_page,
         search_descripcion=search_descripcion,
         filtro_deposito=filtro_deposito,
         filtro_pasillo=filtro_pasillo,
@@ -251,7 +296,7 @@ def obtener_datos_producto(codigo):
     celdas = sheet.get_all_records()
     for fila in celdas:
         if str(fila.get("Codigo")) == str(codigo):
-            return fila.get("Codigo_interno"), fila.get("Codigo"), fila.get("Titulo")
+            return fila.get("Codigo_interno"), fila.get("Codigo"), fila.get("Desc Concatenada")
     return None, None, None
 
 @app.route('/buscar_producto_interdeposito')
@@ -267,10 +312,10 @@ def buscar_producto_interdeposito():
         {
             "codigo_interno": producto.get("Codigo_interno") or producto.get("codigo_interno"),
             "codigo": producto.get("Codigo") or producto.get("codigo"),
-            "descripcion": producto.get("Titulo") or producto.get("titulo")
+            "descripcion": producto.get("Desc Concatenada") or producto.get("Desc Concatenada")
         }
         for producto in productos_raw
-        if all(keyword in (producto.get("Titulo", "").lower() or producto.get("titulo", "").lower()) for keyword in keywords)
+        if all(keyword in (producto.get("Desc Concatenada", "").lower() or producto.get("Desc Concatenada", "").lower()) for keyword in keywords)
     ]
 
     return jsonify({"productos": productos})
@@ -290,7 +335,7 @@ def interdeposito_manual():
     if producto is None:
         return "El producto no está registrado en la hoja de productos", 404
 
-    descripcion = producto.get("Titulo", "")
+    descripcion = producto.get("Desc Concatenada", "")
     codigo = producto.get("Codigo", "")
     depositos = obtener_opciones(depositos_sheet)
 

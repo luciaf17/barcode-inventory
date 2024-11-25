@@ -16,28 +16,28 @@
         <select id="filtro_deposito">
             <option value="">Filtrar por Depósito</option>
             {% for deposito in depositos %}
-                <option value="{{ deposito }}" {% if filtro_deposito == deposito %}selected{% endif %}>{{ deposito }}</option>
+                <option value="{{ deposito | trim }}" {% if filtro_deposito == deposito %}selected{% endif %}>{{ deposito }}</option>
             {% endfor %}
         </select>
-
+        
         <select id="filtro_pasillo">
             <option value="">Filtrar por Pasillo</option>
             {% for pasillo in pasillos %}
-                <option value="{{ pasillo }}" {% if filtro_pasillo == pasillo %}selected{% endif %}>{{ pasillo }}</option>
+                <option value="{{ pasillo | trim }}" {% if filtro_pasillo == pasillo %}selected{% endif %}>{{ pasillo }}</option>
             {% endfor %}
         </select>
-
+        
         <select id="filtro_columna">
             <option value="">Filtrar por Columna</option>
             {% for columna in columnas %}
-                <option value="{{ columna }}" {% if filtro_columna == columna %}selected{% endif %}>{{ columna }}</option>
+                <option value="{{ columna | trim }}" {% if filtro_columna == columna %}selected{% endif %}>{{ columna }}</option>
             {% endfor %}
         </select>
-
+        
         <select id="filtro_estante">
             <option value="">Filtrar por Estante</option>
             {% for estante in estantes %}
-                <option value="{{ estante }}" {% if filtro_estante == estante %}selected{% endif %}>{{ estante }}</option>
+                <option value="{{ estante | trim }}" {% if filtro_estante == estante %}selected{% endif %}>{{ estante }}</option>
             {% endfor %}
         </select>
 
@@ -88,11 +88,11 @@
         {% if page > 1 %}
             <button onclick="navigatePage({{ page - 1 }})">Anterior</button>
         {% endif %}
-
-        {% for p in range(1, total_pages + 1) %}
+    
+        {% for p in range(start_page, end_page + 1) %}
             <button onclick="navigatePage({{ p }})" {% if p == page %}style="font-weight: bold;"{% endif %}>{{ p }}</button>
         {% endfor %}
-
+    
         {% if page < total_pages %}
             <button onclick="navigatePage({{ page + 1 }})">Siguiente</button>
         {% endif %}
@@ -102,24 +102,24 @@
 {% block scripts %}
     <script>
         function applyFilters() {
-            const searchCodigo = document.getElementById("search_codigo").value;
-            const searchDescripcion = document.getElementById("search_descripcion").value;
-            const filtroDeposito = document.getElementById("filtro_deposito").value;
-            const filtroPasillo = document.getElementById("filtro_pasillo").value;
-            const filtroColumna = document.getElementById("filtro_columna").value;
-            const filtroEstante = document.getElementById("filtro_estante").value;
+    const searchCodigo = document.getElementById("search_codigo").value.trim();
+    const searchDescripcion = document.getElementById("search_descripcion").value.trim();
+    const filtroDeposito = document.getElementById("filtro_deposito").value.trim();
+    const filtroPasillo = document.getElementById("filtro_pasillo").value.trim();
+    const filtroColumna = document.getElementById("filtro_columna").value.trim();
+    const filtroEstante = document.getElementById("filtro_estante").value.trim();
 
-            const params = new URLSearchParams({
-                search_codigo: searchCodigo,
-                search_descripcion: searchDescripcion,
-                filtro_deposito: filtroDeposito,
-                filtro_pasillo: filtroPasillo,
-                filtro_columna: filtroColumna,
-                filtro_estante: filtroEstante
-            });
+    const params = new URLSearchParams({
+        search_codigo: searchCodigo,
+        search_descripcion: searchDescripcion,
+        filtro_deposito: filtroDeposito,
+        filtro_pasillo: filtroPasillo,
+        filtro_columna: filtroColumna,
+        filtro_estante: filtroEstante
+    });
 
-            window.location.href = `/buscar_productos?${params.toString()}`;
-        }
+    window.location.href = `/buscar_productos?${params.toString()}`;
+}
 
         function clearFilters() {
             window.location.href = '/buscar_productos';
@@ -144,7 +144,7 @@
         function guardarProducto(button) {
             const row = button.closest("tr");
             const codigoInterno = row.getAttribute("data-codigo-interno");
-            const descripcion = row.cells[2].innerText;
+            const descripcion = row.cells[11].innerText;
             const cantidad = row.cells[3].innerText;
             const deposito = row.cells[4].innerText;
             const pasillo = row.cells[5].innerText;

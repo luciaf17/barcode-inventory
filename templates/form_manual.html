@@ -81,11 +81,23 @@
                     messageContainer.classList.add("success");
                     messageContainer.innerText = data.message;
                 }
+
+                // Borrar el mensaje después de 2 segundos
+                setTimeout(() => {
+                    messageContainer.innerText = "";
+                    messageContainer.classList.remove("success", "error");
+                }, 2000);
             })
             .catch(error => {
                 console.error("Error:", error);
                 messageContainer.classList.add("error");
                 messageContainer.innerText = "Hubo un error al enviar los datos.";
+                
+                // Borrar el mensaje de error después de 2 segundos
+                setTimeout(() => {
+                    messageContainer.innerText = "";
+                    messageContainer.classList.remove("error");
+                }, 2000);
             });
         });
     </script>

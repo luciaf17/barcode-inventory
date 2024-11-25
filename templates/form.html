@@ -10,40 +10,39 @@
     <div class="form-container">
         <h1>Ingresar datos de producto</h1>
         <form id="data-form">
-            <input type="hidden" id="code" name="code" value="">
+            <input type="hidden" id="code" name="code" value="{{ code }}">
 
             <label for="cantidad">Cantidad:</label>
-            <input type="number" id="cantidad" name="cantidad" required>
+            <input type="number" id="cantidad" name="cantidad" value="{{ ultimo_producto.cantidad if ultimo_producto else '' }}" required>
 
             <label for="deposito">Depósito:</label>
             <select id="deposito" name="deposito" required>
                 {% for deposito in depositos %}
-                    <option value="{{ deposito }}" {% if loop.first %}selected{% endif %}>{{ deposito }}</option>
+                    <option value="{{ deposito }}" {% if ultimo_producto and ultimo_producto.deposito == deposito %}selected{% elif loop.first %}selected{% endif %}>{{ deposito }}</option>
                 {% endfor %}
             </select>
 
             <label for="pasillo">Pasillo:</label>
             <select id="pasillo" name="pasillo" required>
                 {% for pasillo in pasillos %}
-                    <option value="{{ pasillo }}" {% if loop.first %}selected{% endif %}>{{ pasillo }}</option>
+                    <option value="{{ pasillo }}" {% if ultimo_producto and ultimo_producto.pasillo == pasillo %}selected{% elif loop.first %}selected{% endif %}>{{ pasillo }}</option>
                 {% endfor %}
             </select>
 
             <label for="columna">Columna:</label>
             <select id="columna" name="columna" required>
                 {% for columna in columnas %}
-                    <option value="{{ columna }}" {% if loop.first %}selected{% endif %}>{{ columna }}</option>
+                    <option value="{{ columna }}" {% if ultimo_producto and ultimo_producto.columna == columna %}selected{% elif loop.first %}selected{% endif %}>{{ columna }}</option>
                 {% endfor %}
             </select>
 
             <label for="estante">Estante:</label>
             <select id="estante" name="estante" required>
                 {% for estante in estantes %}
-                    <option value="{{ estante }}" {% if loop.first %}selected{% endif %}>{{ estante }}</option>
+                    <option value="{{ estante }}" {% if ultimo_producto and ultimo_producto.estante == estante %}selected{% elif loop.first %}selected{% endif %}>{{ estante }}</option>
                 {% endfor %}
             </select>
 
-            <!-- Campo para ingresar descripción manual si no se encuentra el artículo -->
             <div>
                 <label for="descripcion">Descripción:</label>
                 <input type="text" id="descripcion" name="descripcion" placeholder="Ingrese la descripción">
@@ -91,9 +90,9 @@
             const columna = document.getElementById("columna").value;
             const estante = document.getElementById("estante").value;
             const descripcion = document.getElementById("descripcion").value;
-            const messageContainer = document.getElementById("message-container");
+            const messageContainer = document.getElementById("message-container");  // Corregido aquí
 
-            fetch('/agregar', {
+            fetch('/agregar', {  // Cambiado a /agregar
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
