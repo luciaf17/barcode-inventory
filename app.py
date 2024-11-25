@@ -251,7 +251,6 @@ def buscar_productos():
         params['search_codigo'] = f"%{search_codigo}%"
     
     if search_descripcion:
-        # Dividir la descripción en palabras clave
         keywords = search_descripcion.split()
         for i, keyword in enumerate(keywords):
             query += f" AND LOWER(Desc_Concatenada) LIKE :keyword_{i}"
@@ -303,10 +302,10 @@ def buscar_productos():
     ]
 
     # Obtener opciones para los filtros
-    depositos = [row[0] for row in cursor.execute("SELECT DISTINCT deposito FROM productos WHERE deposito IS NOT NULL").fetchall()]
-    pasillos = [row[0] for row in cursor.execute("SELECT DISTINCT pasillo FROM productos WHERE pasillo IS NOT NULL").fetchall()]
-    columnas = [row[0] for row in cursor.execute("SELECT DISTINCT columna FROM productos WHERE columna IS NOT NULL").fetchall()]
-    estantes = [row[0] for row in cursor.execute("SELECT DISTINCT estante FROM productos WHERE estante IS NOT NULL").fetchall()]
+    depositos = [row[0] for row in cursor.execute("SELECT DISTINCT deposito FROM productos WHERE deposito IS NOT NULL AND TRIM(deposito) != ''").fetchall()]
+    pasillos = [row[0] for row in cursor.execute("SELECT DISTINCT pasillo FROM productos WHERE pasillo IS NOT NULL AND TRIM(pasillo) != ''").fetchall()]
+    columnas = [row[0] for row in cursor.execute("SELECT DISTINCT columna FROM productos WHERE columna IS NOT NULL AND TRIM(columna) != ''").fetchall()]
+    estantes = [row[0] for row in cursor.execute("SELECT DISTINCT estante FROM productos WHERE estante IS NOT NULL AND TRIM(estante) != ''").fetchall()]
 
     conn.close()
 
@@ -328,7 +327,6 @@ def buscar_productos():
         filtro_columna=filtro_columna,
         filtro_estante=filtro_estante
     )
-
 
 
 def obtener_datos_producto(codigo):
