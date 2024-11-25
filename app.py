@@ -9,6 +9,7 @@ import socket
 import math
 import datetime
 import hashlib
+import sqlite3
 from functools import wraps
 from datetime import timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -159,19 +160,31 @@ def formulario_manual():
 @app.route('/eliminar_producto', methods=['DELETE'])
 def eliminar_producto():
     codigo_interno = request.args.get('codigo_interno')
-    
-    # Buscar el índice del producto a eliminar
-    celdas = sheet.get_all_values()
-    for i, fila in enumerate(celdas):
-        if str(fila[0]) == str(codigo_interno):  # Comparar con código interno
-            try:
-                sheet.delete_rows(i + 1)  # Google Sheets usa índices basados en 1
-                return jsonify({"success": True}), 200
-            except Exception as e:
-                logger.error(f"Error al eliminar en Google Sheets: {e}")
-                return jsonify({"success": False, "error": "Error al eliminar en Google Sheets"}), 500
 
-    return jsonify({"success": False, "error": "Producto no encontrado"}), 404
+    if not codigo_interno:
+        return jsonify({"success": False, "error": "Código interno no proporcionado."}), 400
+
+    try:
+        # Buscar el índice del producto en Google Sheets
+        cell = sheet.find(codigo_interno, in_column=1)  # Supone que 'Codigo_interno' está en la primera columna
+        if cell:
+            sheet.delete_rows(cell.row)
+            logger.info(f"Producto con Codigo_interno {codigo_interno} eliminado de Google Sheets.")
+        else:
+            logger.warning(f"Producto con Codigo_interno {codigo_interno} no encontrado en Google Sheets.")
+
+        # Eliminar el producto en SQLite
+        conn = sqlite3.connect("ferreteria.db")
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM productos WHERE Codigo_interno = ?", (codigo_interno,))
+        conn.commit()
+        conn.close()
+        logger.info(f"Producto con Codigo_interno {codigo_interno} eliminado de SQLite.")
+
+        return jsonify({"success": True, "message": "Producto eliminado correctamente."}), 200
+    except Exception as e:
+        logger.error(f"Error al eliminar producto con Codigo_interno {codigo_interno}: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route('/editar_producto', methods=['POST'])
 def editar_producto():
@@ -184,22 +197,42 @@ def editar_producto():
     columna = data.get('columna')
     estante = data.get('estante')
 
-    # Buscar el índice del producto a actualizar
-    celdas = sheet.get_all_values()
-    for i, fila in enumerate(celdas):
-        if str(fila[0]) == str(codigo_interno):  # Comparar con código interno
-            try:
-                # Actualizar en Google Sheets
-                sheet.update(f"C{i+1}:H{i+1}", [[descripcion, cantidad, deposito, pasillo, columna, estante]])
-                return jsonify({"success": True}), 200
-            except Exception as e:
-                logger.error(f"Error al actualizar en Google Sheets: {e}")
-                return jsonify({"success": False, "error": "Error al actualizar en Google Sheets"}), 500
+    if not codigo_interno:
+        return jsonify({"success": False, "error": "Código interno no proporcionado."}), 400
 
-    return jsonify({"success": False, "error": "Producto no encontrado"}), 404
+    try:
+        # Actualizar en Google Sheets
+        cell = sheet.find(codigo_interno, in_column=1)  # Buscar por Código Interno (Columna 1)
+        if cell:
+            sheet.update(f"C{cell.row}:H{cell.row}", [[descripcion, cantidad, deposito, pasillo, columna, estante]])
+            logger.info(f"Producto con Codigo_interno {codigo_interno} actualizado en Google Sheets.")
+        else:
+            logger.warning(f"Producto con Codigo_interno {codigo_interno} no encontrado en Google Sheets.")
+
+        # Actualizar en SQLite
+        conn = sqlite3.connect("ferreteria.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE productos
+            SET Desc_Concatenada = ?, cantidad = ?, deposito = ?, pasillo = ?, columna = ?, estante = ?
+            WHERE Codigo_interno = ?
+        """, (descripcion, cantidad, deposito, pasillo, columna, estante, codigo_interno))
+        conn.commit()
+        conn.close()
+        logger.info(f"Producto con Codigo_interno {codigo_interno} actualizado en SQLite.")
+
+        return jsonify({"success": True, "message": "Producto actualizado correctamente."}), 200
+    except Exception as e:
+        logger.error(f"Error al actualizar producto con Codigo_interno {codigo_interno}: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route('/buscar_productos')
 def buscar_productos():
+    # Conexión a la base de datos local
+    conn = sqlite3.connect('ferreteria.db')
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
     page = request.args.get('page', 1, type=int)
     per_page = 25
     search_codigo = str(request.args.get('search_codigo', '')).strip().lower()
@@ -209,69 +242,73 @@ def buscar_productos():
     filtro_columna = str(request.args.get('filtro_columna', '')).strip().lower()
     filtro_estante = str(request.args.get('filtro_estante', '')).strip().lower()
 
-    productos_raw = sheet.get_all_records()
+    # Construir la consulta SQL con filtros dinámicos
+    query = "SELECT * FROM productos WHERE 1=1"
+    params = {}
 
-    # Divide la descripción de búsqueda en palabras clave
-    descripcion_palabras = search_descripcion.split()
-
-    # Filtrado inicial según el código y descripción
-    productos_filtrados = [
-        producto for producto in productos_raw
-        if (search_codigo in str(producto.get("Codigo", "")).strip().lower()) and
-           all(palabra in str(producto.get("Desc Concatenada", "")).strip().lower() for palabra in descripcion_palabras)
-    ]
-
-    # Aplicar filtros adicionales y normalizar valores
+    if search_codigo:
+        query += " AND LOWER(Codigo) LIKE :search_codigo"
+        params['search_codigo'] = f"%{search_codigo}%"
+    
+    if search_descripcion:
+        # Dividir la descripción en palabras clave
+        keywords = search_descripcion.split()
+        for i, keyword in enumerate(keywords):
+            query += f" AND LOWER(Desc_Concatenada) LIKE :keyword_{i}"
+            params[f'keyword_{i}'] = f"%{keyword}%"
+    
     if filtro_deposito:
-        productos_filtrados = [
-            producto for producto in productos_filtrados
-            if str(producto.get("deposito", "")).strip().lower() == filtro_deposito
-        ]
+        query += " AND LOWER(deposito) = :filtro_deposito"
+        params['filtro_deposito'] = filtro_deposito
+    
     if filtro_pasillo:
-        productos_filtrados = [
-            producto for producto in productos_filtrados
-            if str(producto.get("pasillo", "")).strip().lower() == filtro_pasillo
-        ]
+        query += " AND LOWER(pasillo) = :filtro_pasillo"
+        params['filtro_pasillo'] = filtro_pasillo
+    
     if filtro_columna:
-        productos_filtrados = [
-            producto for producto in productos_filtrados
-            if str(producto.get("columna", "")).strip().lower() == filtro_columna
-        ]
+        query += " AND LOWER(columna) = :filtro_columna"
+        params['filtro_columna'] = filtro_columna
+    
     if filtro_estante:
-        productos_filtrados = [
-            producto for producto in productos_filtrados
-            if str(producto.get("estante", "")).strip().lower() == filtro_estante
-        ]
+        query += " AND LOWER(estante) = :filtro_estante"
+        params['filtro_estante'] = filtro_estante
 
-    # Paginación y preparación de los datos para renderizar
-    total_products = len(productos_filtrados)
-    total_pages = math.ceil(total_products / per_page)
-    start = (page - 1) * per_page
-    end = start + per_page
-    productos_paginados = productos_filtrados[start:end]
-    # Cálculo de la paginación
+    # Obtener la cantidad total de productos después del filtrado
+    total_products = cursor.execute(query, params).fetchall()
+    total_pages = math.ceil(len(total_products) / per_page)
+
+    # Agregar paginación
+    query += " LIMIT :limit OFFSET :offset"
+    params['limit'] = per_page
+    params['offset'] = (page - 1) * per_page
+
+    productos_paginados = cursor.execute(query, params).fetchall()
+
+    # Calcular rangos de paginación
     start_page = max(page - 8, 1)
     end_page = min(page + 8, total_pages)
 
     productos = [
         {
-            "Codigo_interno": producto.get("Codigo_interno"),
-            "Codigo": producto.get("Codigo"),
-            "descripcion": producto.get("Desc Concatenada"),
-            "cantidad": producto.get("cantidad"),
-            "deposito": producto.get("deposito"),
-            "pasillo": producto.get("pasillo"),
-            "columna": producto.get("columna"),
-            "estante": producto.get("estante")
+            "Codigo_interno": producto["Codigo_interno"],
+            "Codigo": producto["Codigo"],
+            "descripcion": producto["Desc_Concatenada"],
+            "cantidad": producto["cantidad"],
+            "deposito": producto["deposito"],
+            "pasillo": producto["pasillo"],
+            "columna": producto["columna"],
+            "estante": producto["estante"]
         }
         for producto in productos_paginados
     ]
 
-    # Obtener opciones de filtros
-    depositos = obtener_opciones(depositos_sheet)
-    pasillos = obtener_opciones(pasillos_sheet)
-    columnas = obtener_opciones(columnas_sheet)
-    estantes = obtener_opciones(estantes_sheet)
+    # Obtener opciones para los filtros
+    depositos = [row[0] for row in cursor.execute("SELECT DISTINCT deposito FROM productos WHERE deposito IS NOT NULL").fetchall()]
+    pasillos = [row[0] for row in cursor.execute("SELECT DISTINCT pasillo FROM productos WHERE pasillo IS NOT NULL").fetchall()]
+    columnas = [row[0] for row in cursor.execute("SELECT DISTINCT columna FROM productos WHERE columna IS NOT NULL").fetchall()]
+    estantes = [row[0] for row in cursor.execute("SELECT DISTINCT estante FROM productos WHERE estante IS NOT NULL").fetchall()]
+
+    conn.close()
 
     return render_template(
         'buscar_productos.html',
@@ -283,7 +320,7 @@ def buscar_productos():
         page=page,
         total_pages=total_pages,
         search_codigo=search_codigo,
-        start_page=start_page,  # Pasar estos valores al template
+        start_page=start_page,
         end_page=end_page,
         search_descripcion=search_descripcion,
         filtro_deposito=filtro_deposito,
@@ -292,11 +329,35 @@ def buscar_productos():
         filtro_estante=filtro_estante
     )
 
+
+
 def obtener_datos_producto(codigo):
-    celdas = sheet.get_all_records()
-    for fila in celdas:
-        if str(fila.get("Codigo")) == str(codigo):
-            return fila.get("Codigo_interno"), fila.get("Codigo"), fila.get("Desc Concatenada")
+    """
+    Busca los datos de un producto en la base de datos local SQLite.
+    
+    Args:
+        codigo (str): El código del producto a buscar.
+    
+    Returns:
+        tuple: (Codigo_interno, Codigo, Desc_Concatenada) si se encuentra el producto,
+               o (None, None, None) si no se encuentra.
+    """
+    import sqlite3
+
+    # Conexión a la base de datos local
+    conn = sqlite3.connect('ferreteria.db')
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    # Ejecutar la consulta para buscar el producto por su código
+    query = "SELECT Codigo_interno, Codigo, Desc_Concatenada FROM productos WHERE Codigo = ?"
+    cursor.execute(query, (codigo,))
+    producto = cursor.fetchone()
+
+    conn.close()
+
+    if producto:
+        return producto["Codigo_interno"], producto["Codigo"], producto["Desc_Concatenada"]
     return None, None, None
 
 @app.route('/buscar_producto_interdeposito')

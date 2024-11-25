@@ -132,76 +132,77 @@
         }
 
         function habilitarEdicion(button) {
-            const row = button.closest("tr");
-            row.querySelectorAll(".editable").forEach(cell => {
-                cell.contentEditable = "true";
-                cell.style.backgroundColor = "#fff";
-            });
-            button.style.display = "none";
-            row.querySelector(".save").style.display = "inline";
-        }
+        const row = button.closest("tr");
+        row.querySelectorAll(".editable").forEach(cell => {
+            cell.contentEditable = "true";
+            cell.style.backgroundColor = "#fff";
+        });
+        button.style.display = "none";
+        row.querySelector(".save").style.display = "inline";
+    }
 
-        function guardarProducto(button) {
-            const row = button.closest("tr");
-            const codigoInterno = row.getAttribute("data-codigo-interno");
-            const descripcion = row.cells[11].innerText;
-            const cantidad = row.cells[3].innerText;
-            const deposito = row.cells[4].innerText;
-            const pasillo = row.cells[5].innerText;
-            const columna = row.cells[6].innerText;
-            const estante = row.cells[7].innerText;
+    function guardarProducto(button) {
+        const row = button.closest("tr");
+        const codigoInterno = row.getAttribute("data-codigo-interno");
 
-            fetch(`/editar_producto`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    codigo_interno: codigoInterno,
-                    descripcion: descripcion,
-                    cantidad: cantidad,
-                    deposito: deposito,
-                    pasillo: pasillo,
-                    columna: columna,
-                    estante: estante
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    alert("Producto actualizado con éxito.");
-                } else {
-                    alert("Error al actualizar el producto: " + data.error);
-                }
-            })
-            .catch(error => {
-                console.error("Error al actualizar el producto:", error);
-            });
+        // Ajusta los índices de las celdas según el orden de las columnas en la tabla
+        const descripcion = row.cells[2].innerText.trim();
+        const cantidad = row.cells[3].innerText.trim();
+        const deposito = row.cells[4].innerText.trim();
+        const pasillo = row.cells[5].innerText.trim();
+        const columna = row.cells[6].innerText.trim();
+        const estante = row.cells[7].innerText.trim();
 
-            row.querySelectorAll(".editable").forEach(cell => {
-                cell.contentEditable = "false";
-                cell.style.backgroundColor = "#f4f4f4";
-            });
-            button.style.display = "none";
-            row.querySelector(".edit").style.display = "inline";
-        }
+        fetch(`/editar_producto`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                codigo_interno: codigoInterno,
+                descripcion: descripcion,
+                cantidad: cantidad,
+                deposito: deposito,
+                pasillo: pasillo,
+                columna: columna,
+                estante: estante
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert("Producto actualizado con éxito.");
+                row.querySelectorAll(".editable").forEach(cell => {
+                    cell.contentEditable = "false";
+                    cell.style.backgroundColor = "#f4f4f4";
+                });
+                button.style.display = "none";
+                row.querySelector(".edit").style.display = "inline";
+            } else {
+                alert("Error al actualizar el producto: " + data.error);
+            }
+        })
+        .catch(error => {
+            console.error("Error al actualizar el producto:", error);
+        });
+    }
 
-        function eliminarProducto(codigoInterno) {
-            fetch(`/eliminar_producto?codigo_interno=${codigoInterno}`, {
-                method: 'DELETE'
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    alert("Producto eliminado con éxito.");
-                    location.reload();
-                } else {
-                    alert("Error al eliminar el producto: " + data.error);
-                }
-            })
-            .catch(error => {
-                console.error("Error al eliminar el producto:", error);
-            });
-        }
+    function eliminarProducto(codigoInterno) {
+        fetch(`/eliminar_producto?codigo_interno=${codigoInterno}`, {
+            method: 'DELETE'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert("Producto eliminado con éxito.");
+                location.reload();
+            } else {
+                alert("Error al eliminar el producto: " + data.error);
+            }
+        })
+        .catch(error => {
+            console.error("Error al eliminar el producto:", error);
+        });
+    }
     </script>
 {% endblock %}

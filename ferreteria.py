@@ -1,5 +1,6 @@
 from waitress import serve
-from app import app  # Asegúrate de que 'app' es el nombre de tu instancia de Flask
+from app import app  # Importa tu aplicación Flask
+from sincronizacion_periodica import sincronizar_periodica
 import logging
 import socket
 import time
@@ -44,6 +45,15 @@ def show_loading_window():
     # Iniciar el ciclo de eventos de la ventana
     loading_window.mainloop()
 
+def sincronizacion_periodica_thread():
+    """Ejecuta la sincronización periódica en un bucle."""
+    while True:
+        try:
+            sincronizar_periodica()  # Ejecuta la sincronización
+            time.sleep(30)  # Espera 30 segundos antes del siguiente ciclo
+        except Exception as e:
+            logging.error(f"Error en la sincronización periódica: {e}")
+
 if __name__ == '__main__':
     # Configura el logging para información de servidor
     logging.basicConfig(level=logging.INFO)
@@ -51,11 +61,14 @@ if __name__ == '__main__':
     ip_address = get_local_ip()
     print(f"Starting server on http://{ip_address}:5000")
 
+    # Ejecuta la sincronización periódica en un hilo separado
+    threading.Thread(target=sincronizacion_periodica_thread, daemon=True).start()
+
     # Ejecuta la ventana de carga en un hilo separado
-    threading.Thread(target=show_loading_window).start()
+    threading.Thread(target=show_loading_window, daemon=True).start()
 
     # Ejecuta la función para abrir el navegador en el hilo principal
-    threading.Thread(target=open_browser, args=(ip_address,)).start()
+    threading.Thread(target=open_browser, args=(ip_address,), daemon=True).start()
 
     # Inicia el servidor Waitress en el puerto 5000
     serve(app, host='0.0.0.0', port=5000)
