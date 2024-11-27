@@ -22,12 +22,14 @@ SPREADSHEET_KEY = "1GRtJhJitw1nY4U8ZcNDJozIeMU5yMa_0pfw4hCED-hk"  # Reemplaza co
 # Configuración de la base de datos SQLite
 DB_FILE = "ferreteria.db"
 TABLE_NAME = "productos"
-BATCH_SIZE = 299  # Cantidad de filas que se procesarán por batch
+BATCH_SIZE = 200  # Cantidad de filas que se procesarán por batch
 
 def crear_tabla_local():
-    """Crea la tabla SQLite si no existe."""
+    """Crea las tablas SQLite si no existen."""
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
+
+    # Crear tabla principal para productos
     cursor.execute(f"""
         CREATE TABLE IF NOT EXISTS {TABLE_NAME} (
             Codigo_interno INTEGER PRIMARY KEY,
@@ -37,12 +39,32 @@ def crear_tabla_local():
             deposito TEXT,
             pasillo TEXT,
             columna TEXT,
-            estante TEXT
+            estante TEXT,
+            precio_cpa REAL DEFAULT 0.0,
+            precio_vta REAL DEFAULT 0.0
         )
     """)
+
+    # Crear tabla interdeposito
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS interdeposito (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            fecha TEXT NOT NULL,
+            codigo_interno TEXT NOT NULL,
+            codigo TEXT NOT NULL,
+            descripcion TEXT NOT NULL,
+            deposito_origen TEXT NOT NULL,
+            deposito_destino TEXT NOT NULL,
+            cantidad INTEGER NOT NULL,
+            tipo TEXT NOT NULL DEFAULT 'Remito Interno',
+            numero_remito TEXT NOT NULL
+        )
+    """)
+
     conn.commit()
     conn.close()
-    logger.info("Tabla local creada o ya existe.")
+    logger.info("Tablas locales creadas o ya existen.")
+
 
 def obtener_datos_sheet(sheet, start_row, batch_size):
     """Obtiene datos en lotes desde Google Sheets."""
@@ -101,6 +123,8 @@ def sincronizar_inicial():
 
     crear_tabla_local()
 
+    # Obtener encabezados
+    headers = sheet.row_values(1)
     start_row = 2  # Inicio de los datos (omitir encabezados)
     total_rows = len(sheet.get_all_values()) - 1  # Excluir encabezados
     logger.info(f"Total de filas en Google Sheets: {total_rows}")
@@ -111,11 +135,65 @@ def sincronizar_inicial():
         if not rows:
             logger.info("No se encontraron más datos.")
             break
-        insertar_en_local(rows)
-        start_row += BATCH_SIZE
-        time.sleep(70)  # Evitar superar el límite de la API
 
+        # Filtrar columnas relevantes
+        rows_filtradas = [
+            (
+                fila[headers.index("Codigo_interno")],
+                fila[headers.index("Codigo")],
+                fila[headers.index("Desc Concatenada")],
+                fila[headers.index("cantidad")],
+                fila[headers.index("deposito")],
+                fila[headers.index("pasillo")],
+                fila[headers.index("columna")],
+                fila[headers.index("estante")],
+                fila[headers.index("precio_cpa")],
+                fila[headers.index("precio_vta")]
+            )
+            for fila in rows
+        ]
+
+        # Insertar en la base de datos local
+        insertar_en_local(rows_filtradas)
+
+        # Marcar filas como sincronizadas en Google Sheets
+        for i, fila in enumerate(rows):
+            row_number = start_row + i
+            sheet.update_cell(row_number, headers.index("sincronizado") + 1, "1")
+            logger.info(f"Fila {row_number} marcada como sincronizada.")
+
+        start_row += BATCH_SIZE
+        time.sleep(90)  # Evitar superar el límite de la API
+
+    # Chequeo final para verificar si todas las filas están sincronizadas
+    logger.info("Verificando sincronización final...")
+    verificar_sincronizacion(sheet, headers)
     logger.info("Sincronización inicial completada.")
+
+
+def verificar_sincronizacion(sheet, headers):
+    """Verifica que todas las filas estén marcadas como sincronizadas."""
+    data = sheet.get_all_values()[1:]  # Excluir encabezados
+    index_sincronizado = headers.index("sincronizado")
+    
+    filas_no_sincronizadas = [
+        (i + 2, fila)  # Índice de la fila en Google Sheets (sumar 2 para omitir encabezado)
+        for i, fila in enumerate(data)
+        if not fila[index_sincronizado].strip()  # Fila no sincronizada
+    ]
+
+    if filas_no_sincronizadas:
+        logger.warning(f"Se encontraron {len(filas_no_sincronizadas)} filas no sincronizadas. Reintentando...")
+        for row_number, fila in filas_no_sincronizadas:
+            try:
+                insertar_en_local([fila])
+                sheet.update_cell(row_number, index_sincronizado + 1, "1")
+                logger.info(f"Fila {row_number} sincronizada en el chequeo final.")
+            except Exception as e:
+                logger.error(f"Error al sincronizar fila {row_number}: {e}")
+    else:
+        logger.info("Todas las filas están correctamente sincronizadas.")
+
 
 
 if __name__ == "__main__":

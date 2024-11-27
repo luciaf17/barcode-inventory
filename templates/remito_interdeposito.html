@@ -1,0 +1,293 @@
+{% extends "base.html" %}
+
+{% block title %}Remito Interdepósito{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div style="margin-bottom: 20px;">
+        <button class="button" onclick="window.location.href='/'">Volver</button>
+    </div>
+    <h1>Remito Interdepósito</h1>
+    <form id="form-interdeposito">
+        <!-- Número de remito -->
+        <div>
+            <label for="numero_remito">Número de Remito:</label>
+            <input type="text" id="numero_remito" placeholder="Escribe el número de remito">
+            <button type="button" id="cargar-btn" onclick="cargarRemito()">Cargar</button>
+        </div>
+
+        <!-- Búsqueda de productos -->
+        <div>
+            <label for="buscar_producto">Buscar producto o escanear:</label>
+            <input
+                type="text"
+                id="buscar_producto"
+                placeholder="Ingrese código o descripción"
+                oninput="buscarProducto()"
+                autofocus>
+            <div id="resultados" class="suggestions-list"></div>
+        </div>
+
+        <!-- Tabla de productos seleccionados -->
+        <h3>Productos seleccionados (máximo 19):</h3>
+        <table id="tabla_productos" class="table table-striped">
+            <thead>
+                <tr>
+                    <th>Código Interno</th>
+                    <th>Barcode</th>
+                    <th>Descripción</th>
+                    <th>Depósito Origen</th>
+                    <th>Depósito Destino</th>
+                    <th>Cantidad</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Productos seleccionados se añadirán dinámicamente -->
+            </tbody>
+        </table>
+
+        <!-- Botones de acción -->
+        <div style="margin-top: 20px;">
+            <button type="button" class="button" id="guardar-btn" onclick="guardarRemito()">Guardar e Imprimir</button>
+            <button type="button" class="button" onclick="insertarRemito()">Nuevo Remito</button>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let productosSeleccionados = [];
+    let depositos = [];
+    
+    // Agregar un producto a la tabla
+    function agregarProducto(producto) {
+        if (productosSeleccionados.some(p => p.codigo_interno === producto.codigo_interno)) {
+            alert("Este producto ya está seleccionado.");
+            return;
+        }
+    
+        if (productosSeleccionados.length >= 19) {
+            alert("No puedes agregar más de 19 productos.");
+            return;
+        }
+    
+        productosSeleccionados.push({ ...producto, deposito_destino: "", cantidad: 1 });
+        actualizarTabla();
+    }
+    
+    // Inicialización cuando la página carga
+    window.onload = function () {
+        cargarDepositos();
+        obtenerNumeroRemito();
+        configurarBusquedaConEnter();
+    };
+    
+    // Configurar el evento `keypress` para el campo de búsqueda
+    function configurarBusquedaConEnter() {
+        const inputBuscarProducto = document.getElementById("buscar_producto");
+    
+        // Asegurar que el campo esté siempre enfocado
+        inputBuscarProducto.addEventListener("blur", () => {
+            inputBuscarProducto.focus();
+        });
+    
+        // Procesar el código al presionar "Enter"
+        inputBuscarProducto.addEventListener("keypress", (event) => {
+            if (event.key === "Enter") {
+                const query = inputBuscarProducto.value.trim();
+                if (query) {
+                    buscarProductoPorCodigo(query);
+                    inputBuscarProducto.value = ""; // Limpiar el campo después de procesar
+                }
+            }
+        });
+    }
+    
+    // Obtener depósitos desde el servidor
+    function cargarDepositos() {
+        fetch('/obtener_depositos')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    depositos = data.depositos;
+                }
+            })
+            .catch(error => console.error("Error al cargar depósitos:", error));
+    }
+    
+    // Obtener el próximo número de remito
+    function obtenerNumeroRemito() {
+        fetch('/obtener_numero_remito')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById("numero_remito").value = data.numero_remito;
+                }
+            })
+            .catch(error => console.error("Error al obtener número de remito:", error));
+    }
+    
+    // Buscar productos manualmente
+    function buscarProducto() {
+        const query = document.getElementById("buscar_producto").value.trim();
+        if (query.length < 2) {
+            document.getElementById("resultados").innerHTML = "<p>Ingrese al menos 2 caracteres</p>";
+            return;
+        }
+    
+        fetch(`/buscar_producto_interdeposito?query=${encodeURIComponent(query)}`)
+            .then(response => response.json())
+            .then(data => {
+                const resultados = document.getElementById("resultados");
+                resultados.innerHTML = "";
+    
+                if (data.productos.length > 0) {
+                    data.productos.forEach(producto => {
+                        const item = document.createElement("div");
+                        item.classList.add("result-item");
+                        item.textContent = `${producto.descripcion} (Código Interno: ${producto.codigo_interno})`;
+                        item.onclick = () => agregarProducto(producto);
+                        resultados.appendChild(item);
+                    });
+                } else {
+                    resultados.innerHTML = "<p>No se encontraron resultados.</p>";
+                }
+            })
+            .catch(error => console.error("Error al buscar producto:", error));
+    }
+    
+    // Buscar producto directamente por código
+    function buscarProductoPorCodigo(codigo) {
+        fetch(`/buscar_producto_interdeposito?query=${encodeURIComponent(codigo)}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.productos.length > 0) {
+                    // Si encuentra el producto, lo agrega automáticamente
+                    agregarProducto(data.productos[0]);
+                } else {
+                    alert("Producto no encontrado.");
+                }
+            })
+            .catch(error => console.error("Error al buscar producto:", error));
+    }
+    
+    // Actualizar la tabla de productos seleccionados
+    function actualizarTabla() {
+        const tabla = document.getElementById("tabla_productos").querySelector("tbody");
+        tabla.innerHTML = "";
+    
+        productosSeleccionados.forEach((producto, index) => {
+            const fila = document.createElement("tr");
+            fila.innerHTML = `
+                <td>${producto.codigo_interno}</td>
+                <td>${producto.codigo}</td>
+                <td>${producto.descripcion}</td>
+                <td>
+                    <select data-index="${index}" onchange="actualizarDepositoOrigen(event)">
+                        ${depositos.map(deposito => `
+                            <option value="${deposito}" ${producto.deposito_origen === deposito ? "selected" : ""}>
+                                ${deposito}
+                            </option>
+                        `).join("")}
+                    </select>
+                </td>
+                <td>
+                    <select data-index="${index}" onchange="actualizarDepositoDestino(event)">
+                        <option value="">Seleccione un depósito</option>
+                        ${depositos.map(deposito => `
+                            <option value="${deposito}" ${producto.deposito_destino === deposito ? "selected" : ""}>
+                                ${deposito}
+                            </option>
+                        `).join("")}
+                    </select>
+                </td>
+                <td>
+                    <input type="number" value="${producto.cantidad}" min="1" data-index="${index}" onchange="actualizarCantidad(event)">
+                </td>
+                <td>
+                    <button type="button" class="btn btn-danger" onclick="eliminarProducto(${index})">Eliminar</button>
+                </td>
+            `;
+            tabla.appendChild(fila);
+        });
+    }
+    
+    // Actualizar depósito de origen
+    function actualizarDepositoOrigen(event) {
+        const index = event.target.dataset.index;
+        productosSeleccionados[index].deposito_origen = event.target.value;
+    }
+    
+    // Actualizar depósito de destino
+    function actualizarDepositoDestino(event) {
+        const index = event.target.dataset.index;
+        productosSeleccionados[index].deposito_destino = event.target.value;
+    }
+    
+    // Actualizar cantidad
+    function actualizarCantidad(event) {
+        const index = event.target.dataset.index;
+        productosSeleccionados[index].cantidad = parseInt(event.target.value, 10);
+    }
+    
+    // Eliminar producto
+    function eliminarProducto(index) {
+        productosSeleccionados.splice(index, 1);
+        actualizarTabla();
+    }
+    
+    // Guardar remito
+    function guardarRemito() {
+        fetch('/guardar_interdeposito', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                productos: productosSeleccionados,
+                numero: document.getElementById("numero_remito").value
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert("Remito guardado con éxito. Se generará el PDF.");
+                const pdfUrl = `/static/${data.pdf_file}`; // Evitar duplicados
+                window.open(pdfUrl, "_blank");
+            } else {
+                alert("Error al guardar el remito: " + data.error);
+            }
+        })
+        .catch(error => console.error("Error al guardar remito:", error));
+    }
+    
+    // Cargar un remito existente
+    function cargarRemito() {
+        const numero = document.getElementById("numero_remito").value.trim();
+        if (!numero) {
+            alert("Debe ingresar un número de remito.");
+            return;
+        }
+    
+        fetch(`/cargar_remito?numero=${numero}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    productosSeleccionados = data.productos;
+                    actualizarTabla();
+                } else {
+                    alert(`Error al cargar el remito: ${data.error}`);
+                }
+            })
+            .catch(error => console.error("Error al cargar remito:", error));
+    }
+    
+    // Insertar un nuevo remito
+    function insertarRemito() {
+        productosSeleccionados = [];
+        actualizarTabla();
+        obtenerNumeroRemito();
+    }
+    </script>
+    
+{% endblock %}

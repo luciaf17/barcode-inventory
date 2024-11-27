@@ -43,6 +43,10 @@ Thumbs.db
 __pycache__/
 *.cache
 
+# Archivos de remitos
+static/
+remitos/
+
 # Archivos de editor de texto o IDE
 .vscode/
 .idea/

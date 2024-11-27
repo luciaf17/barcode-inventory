@@ -52,6 +52,8 @@ def sincronizar_periodica():
             index_pasillo = headers.index("pasillo")
             index_columna = headers.index("columna")
             index_estante = headers.index("estante")
+            index_precio_cpa = headers.index("precio_cpa")
+            index_precio_vta = headers.index("precio_vta")
 
             filas_sincronizar = []
 
@@ -65,8 +67,8 @@ def sincronizar_periodica():
             for row_number, fila in filas_sincronizar:
                 try:
                     cursor.execute(f"""
-                        INSERT INTO {TABLE_NAME} (Codigo_interno, Codigo, Desc_Concatenada, cantidad, deposito, pasillo, columna, estante)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        INSERT INTO {TABLE_NAME} (Codigo_interno, Codigo, Desc_Concatenada, cantidad, deposito, pasillo, columna, estante, precio_cpa, precio_vta)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ON CONFLICT(Codigo_interno) DO UPDATE SET
                             Codigo = excluded.Codigo,
                             Desc_Concatenada = excluded.Desc_Concatenada,
@@ -74,7 +76,9 @@ def sincronizar_periodica():
                             deposito = excluded.deposito,
                             pasillo = excluded.pasillo,
                             columna = excluded.columna,
-                            estante = excluded.estante
+                            estante = excluded.estante,
+                            precio_cpa = excluded.precio_cpa,
+                            precio_vta = excluded.precio_vta
                     """, (
                         fila[index_codigo_interno],    # Codigo_interno
                         fila[index_codigo],           # Codigo
@@ -83,7 +87,9 @@ def sincronizar_periodica():
                         fila[index_deposito],         # deposito
                         fila[index_pasillo],          # pasillo
                         fila[index_columna],          # columna
-                        fila[index_estante]           # estante
+                        fila[index_estante],          # estante
+                        fila[index_precio_cpa],       # precio_cpa
+                        fila[index_precio_vta]        # precio_vta
                     ))
 
                     # Marcar la fila como sincronizada en Google Sheets
@@ -103,4 +109,5 @@ def sincronizar_periodica():
             conn.close()
     except Exception as e:
         logger.error(f"Error en la sincronización periódica: {e}")
+
 

@@ -3,105 +3,109 @@
 {% block title %}Buscar Productos{% endblock %}
 
 {% block content %}
-    <button onclick="window.location.href='/'" style="margin: 10px; padding: 8px 16px; font-size: 1em; cursor: pointer;">
-        Volver al Inicio
-    </button>
-    <h1>Buscar Productos</h1>
+<button onclick="window.location.href='/'" style="margin: 10px; padding: 8px 16px; font-size: 1em; cursor: pointer;">
+    Volver al Inicio
+</button>
+<h1>Buscar Productos</h1>
 
-    <!-- Búsqueda y Filtros -->
-    <div class="filters">
-        <input type="text" id="search_codigo" placeholder="Buscar por código..." value="{{ search_codigo }}">
-        <input type="text" id="search_descripcion" placeholder="Buscar por descripción..." value="{{ search_descripcion }}">
-        
-        <select id="filtro_deposito">
-            <option value="">Filtrar por Depósito</option>
-            {% for deposito in depositos %}
-                <option value="{{ deposito | trim }}" {% if filtro_deposito == deposito %}selected{% endif %}>{{ deposito }}</option>
-            {% endfor %}
-        </select>
-        
-        <select id="filtro_pasillo">
-            <option value="">Filtrar por Pasillo</option>
-            {% for pasillo in pasillos %}
-                <option value="{{ pasillo | trim }}" {% if filtro_pasillo == pasillo %}selected{% endif %}>{{ pasillo }}</option>
-            {% endfor %}
-        </select>
-        
-        <select id="filtro_columna">
-            <option value="">Filtrar por Columna</option>
-            {% for columna in columnas %}
-                <option value="{{ columna | trim }}" {% if filtro_columna == columna %}selected{% endif %}>{{ columna }}</option>
-            {% endfor %}
-        </select>
-        
-        <select id="filtro_estante">
-            <option value="">Filtrar por Estante</option>
-            {% for estante in estantes %}
-                <option value="{{ estante | trim }}" {% if filtro_estante == estante %}selected{% endif %}>{{ estante }}</option>
-            {% endfor %}
-        </select>
-
-        <button onclick="applyFilters()">Buscar</button>
-        <button class="clear-filters" onclick="clearFilters()">Quitar Filtros</button>
-    </div>
-
-    <!-- Tabla de Productos -->
-    <div class="table-container">
-        <table>
-            <thead>
-                <tr>
-                    <th>Código Interno</th>
-                    <th>Barcode</th>
-                    <th>Descripción</th>
-                    <th>Cantidad</th>
-                    <th>Depósito</th>
-                    <th>Pasillo</th>
-                    <th>Columna</th>
-                    <th>Estante</th>
-                    <th>Acciones</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for producto in productos %}
-                <tr data-codigo-interno="{{ producto['Codigo_interno'] }}">
-                    <td>{{ producto['Codigo_interno'] }}</td>
-                    <td>{{ producto['Codigo'] }}</td>
-                    <td contenteditable="false" class="editable">{{ producto['descripcion'] }}</td>
-                    <td contenteditable="false" class="editable">{{ producto['cantidad'] }}</td>
-                    <td contenteditable="false" class="editable">{{ producto['deposito'] }}</td>
-                    <td contenteditable="false" class="editable">{{ producto['pasillo'] }}</td>
-                    <td contenteditable="false" class="editable">{{ producto['columna'] }}</td>
-                    <td contenteditable="false" class="editable">{{ producto['estante'] }}</td>
-                    <td class="action-buttons">
-                        <button class="edit" onclick="habilitarEdicion(this)">Editar</button>
-                        <button class="save" onclick="guardarProducto(this)" style="display: none;">Guardar</button>
-                        <button class="delete" onclick="eliminarProducto('{{ producto['Codigo_interno'] }}')">Eliminar</button>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-
-    <!-- Paginación -->
-    <div class="pagination">
-        {% if page > 1 %}
-            <button onclick="navigatePage({{ page - 1 }})">Anterior</button>
-        {% endif %}
+<!-- Búsqueda y Filtros -->
+<div class="filters">
+    <input type="text" id="search_codigo" placeholder="Buscar por código..." value="{{ search_codigo }}">
+    <input type="text" id="search_descripcion" placeholder="Buscar por descripción..." value="{{ search_descripcion }}">
     
-        {% for p in range(start_page, end_page + 1) %}
-            <button onclick="navigatePage({{ p }})" {% if p == page %}style="font-weight: bold;"{% endif %}>{{ p }}</button>
+    <select id="filtro_deposito">
+        <option value="">Filtrar por Depósito</option>
+        {% for deposito in depositos %}
+            <option value="{{ deposito | trim }}" {% if filtro_deposito == deposito %}selected{% endif %}>{{ deposito }}</option>
         {% endfor %}
+    </select>
     
-        {% if page < total_pages %}
-            <button onclick="navigatePage({{ page + 1 }})">Siguiente</button>
-        {% endif %}
-    </div>
+    <select id="filtro_pasillo">
+        <option value="">Filtrar por Pasillo</option>
+        {% for pasillo in pasillos %}
+            <option value="{{ pasillo | trim }}" {% if filtro_pasillo == pasillo %}selected{% endif %}>{{ pasillo }}</option>
+        {% endfor %}
+    </select>
+    
+    <select id="filtro_columna">
+        <option value="">Filtrar por Columna</option>
+        {% for columna in columnas %}
+            <option value="{{ columna | trim }}" {% if filtro_columna == columna %}selected{% endif %}>{{ columna }}</option>
+        {% endfor %}
+    </select>
+    
+    <select id="filtro_estante">
+        <option value="">Filtrar por Estante</option>
+        {% for estante in estantes %}
+            <option value="{{ estante | trim }}" {% if filtro_estante == estante %}selected{% endif %}>{{ estante }}</option>
+        {% endfor %}
+    </select>
+
+    <button onclick="applyFilters()">Buscar</button>
+    <button class="clear-filters" onclick="clearFilters()">Quitar Filtros</button>
+</div>
+
+<!-- Tabla de Productos -->
+<div class="table-container">
+    <table>
+        <thead>
+            <tr>
+                <th>Código Interno</th>
+                <th>Barcode</th>
+                <th>Descripción</th>
+                <th>Cantidad</th>
+                <th>Depósito</th>
+                <th>Pasillo</th>
+                <th>Columna</th>
+                <th>Estante</th>
+                <th>Precio CPA</th>
+                <th>Precio VTA</th>
+                <th>Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for producto in productos %}
+            <tr data-codigo-interno="{{ producto['Codigo_interno'] }}">
+                <td>{{ producto['Codigo_interno'] }}</td>
+                <td>{{ producto['Codigo'] }}</td>
+                <td contenteditable="false" class="editable">{{ producto['descripcion'] }}</td>
+                <td contenteditable="false" class="editable">{{ producto['cantidad'] }}</td>
+                <td contenteditable="false" class="editable">{{ producto['deposito'] }}</td>
+                <td contenteditable="false" class="editable">{{ producto['pasillo'] }}</td>
+                <td contenteditable="false" class="editable">{{ producto['columna'] }}</td>
+                <td contenteditable="false" class="editable">{{ producto['estante'] }}</td>
+                <td contenteditable="false" class="editable">${{ producto['precio_cpa'] }}</td>
+                <td contenteditable="false" class="editable">${{ producto['precio_vta'] }}</td>
+                <td class="action-buttons">
+                    <button class="edit" onclick="habilitarEdicion(this)">Editar</button>
+                    <button class="save" onclick="guardarProducto(this)" style="display: none;">Guardar</button>
+                    <button class="delete" onclick="eliminarProducto('{{ producto['Codigo_interno'] }}')">Eliminar</button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Paginación -->
+<div class="pagination">
+    {% if page > 1 %}
+        <button onclick="navigatePage({{ page - 1 }})">Anterior</button>
+    {% endif %}
+
+    {% for p in range(start_page, end_page + 1) %}
+        <button onclick="navigatePage({{ p }})" {% if p == page %}style="font-weight: bold;"{% endif %}>{{ p }}</button>
+    {% endfor %}
+
+    {% if page < total_pages %}
+        <button onclick="navigatePage({{ page + 1 }})">Siguiente</button>
+    {% endif %}
+</div>
 {% endblock %}
 
 {% block scripts %}
-    <script>
-        function applyFilters() {
+<script>
+function applyFilters() {
     const searchCodigo = document.getElementById("search_codigo").value.trim();
     const searchDescripcion = document.getElementById("search_descripcion").value.trim();
     const filtroDeposito = document.getElementById("filtro_deposito").value.trim();
@@ -121,88 +125,91 @@
     window.location.href = `/buscar_productos?${params.toString()}`;
 }
 
-        function clearFilters() {
-            window.location.href = '/buscar_productos';
+function clearFilters() {
+    window.location.href = '/buscar_productos';
+}
+
+function navigatePage(page) {
+    const params = new URLSearchParams(window.location.search);
+    params.set('page', page);
+    window.location.href = `/buscar_productos?${params.toString()}`;
+}
+
+function habilitarEdicion(button) {
+    const row = button.closest("tr");
+    row.querySelectorAll(".editable").forEach(cell => {
+        cell.contentEditable = "true";
+        cell.style.backgroundColor = "#fff";
+    });
+    button.style.display = "none";
+    row.querySelector(".save").style.display = "inline";
+}
+
+function guardarProducto(button) {
+    const row = button.closest("tr");
+    const codigoInterno = row.getAttribute("data-codigo-interno");
+
+    const descripcion = row.cells[2].innerText.trim();
+    const cantidad = row.cells[3].innerText.trim();
+    const deposito = row.cells[4].innerText.trim();
+    const pasillo = row.cells[5].innerText.trim();
+    const columna = row.cells[6].innerText.trim();
+    const estante = row.cells[7].innerText.trim();
+    const precioCpa = row.cells[8].innerText.trim();
+    const precioVta = row.cells[9].innerText.trim();
+
+    fetch(`/editar_producto`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            codigo_interno: codigoInterno,
+            descripcion: descripcion,
+            cantidad: cantidad,
+            deposito: deposito,
+            pasillo: pasillo,
+            columna: columna,
+            estante: estante,
+            precio_cpa: precioCpa,
+            precio_vta: precioVta
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert("Producto actualizado con éxito.");
+            row.querySelectorAll(".editable").forEach(cell => {
+                cell.contentEditable = "false";
+                cell.style.backgroundColor = "#f4f4f4";
+            });
+            button.style.display = "none";
+            row.querySelector(".edit").style.display = "inline";
+        } else {
+            alert("Error al actualizar el producto: " + data.error);
         }
+    })
+    .catch(error => {
+        console.error("Error al actualizar el producto:", error);
+    });
+}
 
-        function navigatePage(page) {
-            const params = new URLSearchParams(window.location.search);
-            params.set('page', page);
-            window.location.href = `/buscar_productos?${params.toString()}`;
+function eliminarProducto(codigoInterno) {
+    fetch(`/eliminar_producto?codigo_interno=${codigoInterno}`, {
+        method: 'DELETE'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert("Producto eliminado con éxito.");
+            location.reload();
+        } else {
+            alert("Error al eliminar el producto: " + data.error);
         }
-
-        function habilitarEdicion(button) {
-        const row = button.closest("tr");
-        row.querySelectorAll(".editable").forEach(cell => {
-            cell.contentEditable = "true";
-            cell.style.backgroundColor = "#fff";
-        });
-        button.style.display = "none";
-        row.querySelector(".save").style.display = "inline";
-    }
-
-    function guardarProducto(button) {
-        const row = button.closest("tr");
-        const codigoInterno = row.getAttribute("data-codigo-interno");
-
-        // Ajusta los índices de las celdas según el orden de las columnas en la tabla
-        const descripcion = row.cells[2].innerText.trim();
-        const cantidad = row.cells[3].innerText.trim();
-        const deposito = row.cells[4].innerText.trim();
-        const pasillo = row.cells[5].innerText.trim();
-        const columna = row.cells[6].innerText.trim();
-        const estante = row.cells[7].innerText.trim();
-
-        fetch(`/editar_producto`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                codigo_interno: codigoInterno,
-                descripcion: descripcion,
-                cantidad: cantidad,
-                deposito: deposito,
-                pasillo: pasillo,
-                columna: columna,
-                estante: estante
-            })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                alert("Producto actualizado con éxito.");
-                row.querySelectorAll(".editable").forEach(cell => {
-                    cell.contentEditable = "false";
-                    cell.style.backgroundColor = "#f4f4f4";
-                });
-                button.style.display = "none";
-                row.querySelector(".edit").style.display = "inline";
-            } else {
-                alert("Error al actualizar el producto: " + data.error);
-            }
-        })
-        .catch(error => {
-            console.error("Error al actualizar el producto:", error);
-        });
-    }
-
-    function eliminarProducto(codigoInterno) {
-        fetch(`/eliminar_producto?codigo_interno=${codigoInterno}`, {
-            method: 'DELETE'
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                alert("Producto eliminado con éxito.");
-                location.reload();
-            } else {
-                alert("Error al eliminar el producto: " + data.error);
-            }
-        })
-        .catch(error => {
-            console.error("Error al eliminar el producto:", error);
-        });
-    }
-    </script>
+    })
+    .catch(error => {
+        console.error("Error al eliminar el producto:", error);
+    });
+}
+</script>
 {% endblock %}

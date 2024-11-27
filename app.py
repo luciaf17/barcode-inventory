@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template, session, redirect, url_for
+from flask import Flask, request, jsonify, render_template, session, redirect, url_for, send_file
 import requests
 from bs4 import BeautifulSoup
 import gspread
@@ -13,6 +13,8 @@ import sqlite3
 from functools import wraps
 from datetime import timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
+from fpdf import FPDF
+import os
 
 
 
@@ -196,15 +198,35 @@ def editar_producto():
     pasillo = data.get('pasillo')
     columna = data.get('columna')
     estante = data.get('estante')
+    precio_cpa = data.get('precio_cpa')
+    precio_vta = data.get('precio_vta')
 
     if not codigo_interno:
         return jsonify({"success": False, "error": "Código interno no proporcionado."}), 400
 
     try:
-        # Actualizar en Google Sheets
+        # Buscar la fila en Google Sheets por código interno
         cell = sheet.find(codigo_interno, in_column=1)  # Buscar por Código Interno (Columna 1)
         if cell:
-            sheet.update(f"C{cell.row}:H{cell.row}", [[descripcion, cantidad, deposito, pasillo, columna, estante]])
+            row = cell.row
+
+            # Actualizar cada columna específica para evitar sobrescribir fórmulas
+            updates = [
+                ("C", descripcion),  # Columna C: Descripción
+                ("D", cantidad),     # Columna D: Cantidad
+                ("E", deposito),     # Columna E: Depósito
+                ("F", pasillo),      # Columna F: Pasillo
+                ("G", columna),      # Columna G: Columna
+                ("H", estante),      # Columna H: Estante
+                ("O", precio_cpa),   # Columna O: Precio CPA
+                ("P", precio_vta)    # Columna P: Precio VTA
+            ]
+
+            # Realizar actualizaciones específicas
+            for col, value in updates:
+                if value is not None:
+                    # Los valores deben ser una lista de listas para la API de Google Sheets
+                    sheet.update(f"{col}{row}", [[value]])
             logger.info(f"Producto con Codigo_interno {codigo_interno} actualizado en Google Sheets.")
         else:
             logger.warning(f"Producto con Codigo_interno {codigo_interno} no encontrado en Google Sheets.")
@@ -214,9 +236,9 @@ def editar_producto():
         cursor = conn.cursor()
         cursor.execute("""
             UPDATE productos
-            SET Desc_Concatenada = ?, cantidad = ?, deposito = ?, pasillo = ?, columna = ?, estante = ?
+            SET Desc_Concatenada = ?, cantidad = ?, deposito = ?, pasillo = ?, columna = ?, estante = ?, precio_cpa = ?, precio_vta = ?
             WHERE Codigo_interno = ?
-        """, (descripcion, cantidad, deposito, pasillo, columna, estante, codigo_interno))
+        """, (descripcion, cantidad, deposito, pasillo, columna, estante, precio_cpa, precio_vta, codigo_interno))
         conn.commit()
         conn.close()
         logger.info(f"Producto con Codigo_interno {codigo_interno} actualizado en SQLite.")
@@ -225,6 +247,7 @@ def editar_producto():
     except Exception as e:
         logger.error(f"Error al actualizar producto con Codigo_interno {codigo_interno}: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
+
 
 @app.route('/buscar_productos')
 def buscar_productos():
@@ -296,7 +319,9 @@ def buscar_productos():
             "deposito": producto["deposito"],
             "pasillo": producto["pasillo"],
             "columna": producto["columna"],
-            "estante": producto["estante"]
+            "estante": producto["estante"],
+            "precio_cpa": producto["precio_cpa"],
+            "precio_vta": producto["precio_vta"]
         }
         for producto in productos_paginados
     ]
@@ -357,28 +382,6 @@ def obtener_datos_producto(codigo):
     if producto:
         return producto["Codigo_interno"], producto["Codigo"], producto["Desc_Concatenada"]
     return None, None, None
-
-@app.route('/buscar_producto_interdeposito')
-def buscar_producto_interdeposito():
-    query = request.args.get('query', '').lower()
-    productos_raw = sheet.get_all_records()
-
-    # Divide la consulta en palabras clave
-    keywords = query.split()
-
-    # Filtrar productos que coincidan con todas las palabras clave
-    productos = [
-        {
-            "codigo_interno": producto.get("Codigo_interno") or producto.get("codigo_interno"),
-            "codigo": producto.get("Codigo") or producto.get("codigo"),
-            "descripcion": producto.get("Desc Concatenada") or producto.get("Desc Concatenada")
-        }
-        for producto in productos_raw
-        if all(keyword in (producto.get("Desc Concatenada", "").lower() or producto.get("Desc Concatenada", "").lower()) for keyword in keywords)
-    ]
-
-    return jsonify({"productos": productos})
-
 
 
 @app.route('/interdeposito_manual')
@@ -516,24 +519,277 @@ def interdeposito():
                            descripcion=descripcion, 
                            depositos=depositos)
 
-# Ruta para procesar y guardar el movimiento de Interdeposito
+@app.route('/remito_interdeposito')
+def remito_interdeposito():
+    """Renderiza el formulario para remito interdepósito."""
+    return render_template('remito_interdeposito.html')
+
+@app.route('/buscar_producto_interdeposito', methods=['GET'])
+def buscar_producto_interdeposito():
+    """Busca productos por código o descripción en la base de datos, permitiendo palabras clave."""
+    query = request.args.get('query', '').lower()
+
+    if not query or len(query) < 2:
+        return jsonify({"success": False, "error": "Debe ingresar al menos 2 caracteres."}), 400
+
+    conn = sqlite3.connect("ferreteria.db")
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    try:
+        # Dividir la consulta en palabras clave
+        keywords = query.split()
+
+        # Construir una consulta dinámica para buscar cada palabra clave
+        conditions = " AND ".join(
+            f"(LOWER(Codigo) LIKE ? OR LOWER(Desc_Concatenada) LIKE ?)"
+            for _ in keywords
+        )
+        params = [f"%{kw}%" for kw in keywords for _ in range(2)]  # Duplicar para `Codigo` y `Desc_Concatenada`
+
+        # Consulta SQL dinámica
+        query_sql = f"""
+            SELECT Codigo_interno, Codigo, Desc_Concatenada AS descripcion, deposito 
+            FROM productos 
+            WHERE {conditions}
+        """
+        cursor.execute(query_sql, params)
+        productos = cursor.fetchall()
+
+        # Convertir los resultados a un formato JSON
+        resultados = [
+            {
+                "codigo_interno": producto["Codigo_interno"],
+                "codigo": producto["Codigo"],
+                "descripcion": producto["descripcion"],
+                "deposito_origen": producto["deposito"]
+            }
+            for producto in productos
+        ]
+
+        return jsonify({"success": True, "productos": resultados})
+    except Exception as e:
+        logger.error(f"Error al buscar productos: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+    finally:
+        conn.close()
+
+# Ruta para cargar un remito existente
+@app.route('/cargar_remito', methods=['GET'])
+def cargar_remito():
+    numero = request.args.get('numero')
+    if not numero:
+        return jsonify({"success": False, "error": "Debe proporcionar un número de remito."}), 400
+
+    try:
+        rows = interdeposito_sheet.get_all_values()
+        productos = [
+            {
+                "codigo_interno": row[1],
+                "codigo": row[2],
+                "descripcion": row[3],
+                "deposito_origen": row[4],
+                "deposito_destino": row[5],
+                "cantidad": row[6],
+            }
+            for row in rows if row[9] == numero.zfill(6)
+        ]
+
+        if not productos:
+            return jsonify({"success": False, "error": f"No se encontró el remito #{numero}."})
+
+        return jsonify({"success": True, "productos": productos})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+
 @app.route('/guardar_interdeposito', methods=['POST'])
 def guardar_interdeposito():
-    codigo = request.form.get('codigo')
-    codigo_interno = request.form.get('codigo_interno')
-    descripcion = request.form.get('descripcion')
-    deposito_origen = request.form.get('deposito_origen')
-    deposito_destino = request.form.get('deposito_destino')
-    cantidad = int(request.form.get('cantidad'))
-    observaciones = request.form.get('observaciones', '')
-    fecha = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    """Guarda o actualiza un remito interdepósito y genera el PDF."""
+    data = request.get_json()
+    productos = data.get('productos', [])
+    numero_remito = data.get('numero')  # Número asociado del remito
 
-    # Guardar el registro en la hoja de "Interdeposito"
+    if len(productos) > 19:
+        return jsonify({"success": False, "error": "No puedes agregar más de 19 productos."}), 400
+
     try:
-        interdeposito_sheet.append_row([fecha, codigo_interno, codigo, descripcion, deposito_origen, deposito_destino, cantidad, observaciones])
-        return jsonify({"message": "Movimiento registrado con éxito"}), 200
+        conn = sqlite3.connect("ferreteria.db")
+        cursor = conn.cursor()
+
+        if numero_remito:  # Si se proporciona un número, editar
+            rows = interdeposito_sheet.get_all_values()
+            indices = [i + 1 for i, row in enumerate(rows) if row[9] == numero_remito.zfill(6)]
+            for index in reversed(indices):
+                interdeposito_sheet.delete_rows(index)
+
+            # Eliminar también de la base de datos
+            cursor.execute("DELETE FROM interdeposito WHERE numero_remito = ?", (numero_remito,))
+        else:  # Generar nuevo número
+            rows = interdeposito_sheet.get_all_values()
+            ultimo_nro_asociado = max([int(row[9]) for row in rows[1:]]) if len(rows) > 1 else 0
+            numero_remito = str(ultimo_nro_asociado + 1).zfill(6)
+
+        # Guardar productos en Google Sheets y en la base de datos
+        for producto in productos:
+            # Insertar en Google Sheets
+            interdeposito_sheet.append_row([
+                datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                producto['codigo_interno'],
+                producto['codigo'],
+                producto['descripcion'],
+                producto['deposito_origen'],
+                producto['deposito_destino'],
+                producto['cantidad'],
+                "",
+                "Remito Interno",
+                numero_remito
+            ])
+
+            # Insertar en la base de datos
+            cursor.execute("""
+                INSERT INTO interdeposito (
+                    fecha, codigo_interno, codigo, descripcion,
+                    deposito_origen, deposito_destino, cantidad, tipo, numero_remito
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                producto['codigo_interno'],
+                producto['codigo'],
+                producto['descripcion'],
+                producto['deposito_origen'],
+                producto['deposito_destino'],
+                producto['cantidad'],
+                "Remito Interno",
+                numero_remito
+            ))
+
+        conn.commit()
+
+        # Generar PDF
+        fecha_actual = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        pdf_file = generar_pdf_remito(productos, numero_remito, fecha_actual)
+
+        return jsonify({"success": True, "pdf_file": pdf_file, "numero_remito": numero_remito})
     except Exception as e:
-        return jsonify({"error": f"Error al actualizar Google Sheets: {e}"}), 500
+        return jsonify({"success": False, "error": str(e)})
+    finally:
+        conn.close()
+
+
+def generar_pdf_remito(productos, nro_remito, fecha):
+    import os
+    from math import ceil
+
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_auto_page_break(auto=True, margin=15)
+
+    # Registrar fuentes DejaVu con variantes
+    pdf.add_font('DejaVu', '', 'static/fonts/DejaVuSansCondensed.ttf', uni=True)
+    pdf.add_font('DejaVu', 'B', 'static/fonts/DejaVuSansCondensed-Bold.ttf', uni=True)
+
+    # Encabezado
+    logo_path = "static/wouchuk-logo.png"
+    if os.path.exists(logo_path):
+        pdf.image(logo_path, 10, 8, 33)
+    pdf.set_font('DejaVu', 'B', 12)
+    pdf.cell(200, 10, f"Remito Interdepósito - #{nro_remito}", ln=True, align="C")
+    pdf.ln(10)
+
+    pdf.set_font('DejaVu', '', 10)
+    pdf.cell(200, 10, f"Fecha: {fecha}", ln=True, align="R")
+    pdf.ln(10)
+
+    # Configuración de la tabla
+    pdf.set_fill_color(0, 150, 0)  # Verde del encabezado
+    pdf.set_text_color(255, 255, 255)
+    pdf.set_font('DejaVu', 'B', 8)
+
+    ancho_total_pagina = 190  # A4 menos márgenes
+    ancho_total_tabla = 170  # Ancho total de la tabla
+    margen_izquierdo = (ancho_total_pagina - ancho_total_tabla) / 2
+
+    pdf.set_x(margen_izquierdo)  # Centrar la tabla
+
+    # Encabezados
+    pdf.cell(15, 10, "ID", border=1, align="C", fill=True)
+    pdf.cell(35, 10, "Barcode", border=1, align="C", fill=True)
+    pdf.cell(60, 10, "Descripción", border=1, align="C", fill=True)
+    pdf.cell(20, 10, "D.Origen", border=1, align="C", fill=True)
+    pdf.cell(20, 10, "D.Destino", border=1, align="C", fill=True)
+    pdf.cell(20, 10, "Cantidad", border=1, align="C", fill=True)
+    pdf.ln()
+
+    # Filas de la tabla
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_font('DejaVu', '', 8)
+
+    for producto in productos:
+        pdf.set_x(margen_izquierdo)
+
+        # Calcular altura para la descripción (máximo de líneas necesarias)
+        max_lineas = ceil(pdf.get_string_width(producto['descripcion']) / 60)  # Ajusta el divisor según el ancho de la celda
+        altura_fila = max_lineas * 5  # Altura de cada línea
+
+        # Celda para ID
+        pdf.cell(15, altura_fila, producto['codigo_interno'], border=1, align="C")
+        # Celda para Barcode
+        pdf.cell(35, altura_fila, producto['codigo'], border=1, align="C")
+        
+        # Celda para descripción como multi_cell
+        x, y = pdf.get_x(), pdf.get_y()
+        pdf.multi_cell(60, 5, producto['descripcion'], border=1, align="L")
+        pdf.set_xy(x + 60, y)  # Ajustar la posición después de multi_cell
+
+        # Celdas para los depósitos y cantidad
+        pdf.cell(20, altura_fila, producto['deposito_origen'], border=1, align="C")
+        pdf.cell(20, altura_fila, producto['deposito_destino'], border=1, align="C")
+        pdf.cell(20, altura_fila, str(producto['cantidad']), border=1, align="C")
+        pdf.ln()
+
+    # Guardar PDF
+    pdf_dir = "static/remitos"
+    if not os.path.exists(pdf_dir):
+        os.makedirs(pdf_dir)
+
+    pdf_path = os.path.join(pdf_dir, f"remito_{nro_remito}.pdf")
+    pdf.output(pdf_path)
+
+    return f"remitos/remito_{nro_remito}.pdf"
+
+
+
+
+@app.route('/obtener_numero_remito', methods=['GET'])
+def obtener_numero_remito():
+    """Obtiene el próximo número de remito disponible basado en el mayor número actual."""
+    try:
+        rows = interdeposito_sheet.get_all_values()
+        # Extraer los valores de la columna del número de remito (columna 10, índice 9)
+        numeros_remitos = [int(row[9]) for row in rows[1:] if row[9].isdigit()]
+        
+        # Encontrar el mayor número de remito
+        max_nro_remito = max(numeros_remitos) if numeros_remitos else 0
+        
+        # Generar el próximo número
+        nuevo_nro_remito = str(max_nro_remito + 1).zfill(6)
+        return jsonify({"success": True, "numero_remito": nuevo_nro_remito})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+
+
+@app.route('/obtener_depositos', methods=['GET'])
+def obtener_depositos():
+    """Obtiene la lista de depósitos desde la hoja Deposito."""
+    try:
+        depositos = [row[0] for row in depositos_sheet.get_all_values() if row[0].strip()]
+        return jsonify({"success": True, "depositos": depositos})
+    except Exception as e:
+        logger.error(f"Error al obtener depósitos: {e}")
+        return jsonify({"success": False, "error": str(e)})
+    
 
 # Función para obtener los usuarios desde la hoja
 def obtener_usuarios():

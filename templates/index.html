@@ -3,86 +3,39 @@
 {% block title %}Menú Principal{% endblock %}
 
 {% block content %}
-    <div class="container">
-        <h1>Menú Principal</h1>
-        <button class="button" onclick="abrirModal()">Interdepósito Manual</button>
-        <button class="button" onclick="window.location.href='/buscar_productos'">Buscar Productos</button>
-        <button class="button" onclick="window.location.href='/formulario_manual'">Ingresar Producto Manual</button>
+<div class="container">
+    <h1>Menú Principal</h1>
+
+    <!-- Seleccionar tipo de remito -->
+    <div>
+        <label for="tipo_remito">Seleccionar tipo de remito:</label>
+        <select id="tipo_remito" onchange="redireccionarPorRemito(this.value)">
+            <option value="" disabled selected>Seleccione una opción</option>
+            <option value="interdeposito">Interdepósito</option>
+            <option value="compra">Compra</option>
+            <option value="venta">Venta</option>
+        </select>
     </div>
 
-    <!-- Modal de Búsqueda -->
-    <div id="modal" class="modal">
-        <div class="modal-content">
-            <span class="close" onclick="cerrarModal()">&times;</span>
-            <h2>Buscar Producto para Interdepósito</h2>
-            <label for="search-description">Buscar por descripción:</label>
-            <input type="text" id="search-description" oninput="buscarProducto()">
-            <div id="resultados" class="suggestions-list"></div>
-            <button class="button" id="aceptar" onclick="aceptarSeleccion()" disabled>Aceptar</button>
-        </div>
+    <!-- Opciones adicionales -->
+    <div class="menu-options">
+        <button class="button" onclick="window.location.href='/formulario_manual'">Ingresar Producto Manual</button>
+        <button class="button" onclick="window.location.href='/buscar_productos'">Buscar Productos</button>
     </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
-    <script>
-        let productoSeleccionado = null;
-
-        function abrirModal() {
-            document.getElementById("modal").style.display = "flex";
+<script>
+    // Redirige según el tipo de remito seleccionado
+    function redireccionarPorRemito(tipo) {
+        if (tipo === "interdeposito") {
+            window.location.href = "/remito_interdeposito";
+        } else if (tipo === "compra") {
+            window.location.href = "/remito_compra";
+        } else if (tipo === "venta") {
+            window.location.href = "/remito_venta";
         }
-
-        function cerrarModal() {
-            document.getElementById("modal").style.display = "none";
-            document.getElementById("search-description").value = "";
-            document.getElementById("resultados").innerHTML = "";
-            productoSeleccionado = null;
-            document.getElementById("aceptar").disabled = true;
-        }
-
-        function buscarProducto() {
-            const searchText = document.getElementById("search-description").value.toLowerCase();
-            if (searchText.length < 2) {
-                document.getElementById("resultados").innerHTML = "<p>Escribe al menos 2 caracteres.</p>";
-                return;
-            }
-
-            fetch(`/buscar_producto_interdeposito?query=${encodeURIComponent(searchText)}`)
-                .then(response => response.json())
-                .then(data => {
-                    const resultadosContainer = document.getElementById("resultados");
-                    resultadosContainer.innerHTML = "";  // Limpiar resultados previos
-
-                    if (data.productos.length > 0) {
-                        data.productos.forEach(producto => {
-                            const item = document.createElement("div");
-                            item.classList.add("result-item");
-                            item.textContent = `${producto.descripcion} (Código Interno: ${producto.codigo_interno})`;
-                            item.onclick = () => seleccionarProducto(producto, item);
-                            resultadosContainer.appendChild(item);
-                        });
-                    } else {
-                        resultadosContainer.innerHTML = "<p>No se encontraron resultados.</p>";
-                    }
-                })
-                .catch(error => {
-                    console.error("Error en la búsqueda:", error);
-                    document.getElementById("resultados").innerHTML = "<p>Error al buscar productos.</p>";
-                });
-        }
-
-        function seleccionarProducto(producto, item) {
-            document.querySelectorAll(".result-item").forEach(el => el.classList.remove("selected"));
-            item.classList.add("selected");
-            productoSeleccionado = producto;
-            document.getElementById("aceptar").disabled = false;
-        }
-
-        function aceptarSeleccion() {
-            if (productoSeleccionado) {
-                const codigoInterno = productoSeleccionado.codigo_interno;
-                cerrarModal();
-                window.location.href = `/interdeposito_manual?codigo_interno=${codigoInterno}`;
-            }
-        }
-    </script>
+    }
+</script>
 {% endblock %}
