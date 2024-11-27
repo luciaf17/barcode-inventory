@@ -194,6 +194,73 @@ def verificar_sincronizacion(sheet, headers):
     else:
         logger.info("Todas las filas están correctamente sincronizadas.")
 
+def sincronizar_clientes():
+    """Sincroniza los datos de clientes desde Google Sheets a la tabla `clientes` en SQLite."""
+    logger.info("Iniciando sincronización de clientes...")
+
+    try:
+        # Configuración de Google Sheets
+        credentials = Credentials.from_service_account_file(CREDENTIALS_FILE, scopes=SCOPES)
+        client = gspread.authorize(credentials)
+        sheet = client.open_by_key(SPREADSHEET_KEY).worksheet("Clientes+Tipos")
+
+        # Obtener encabezados
+        headers = sheet.row_values(1)
+        index_sincronizado = headers.index("sincronizado") + 1  # Ajustar a índice 1 basado en Google Sheets
+
+        # Obtener datos de la hoja
+        rows = sheet.get_all_values()[1:]  # Excluir encabezados
+        data = [
+            {
+                "id_cliente": row[headers.index("ID_Cliente")],
+                "nombre_cliente": row[headers.index("Nombre Cliente")],
+                "sincronizado": row[index_sincronizado - 1] if len(row) > index_sincronizado - 1 else "",
+                "row_number": i + 2  # Ajustar índice de fila para Google Sheets
+            }
+            for i, row in enumerate(rows)
+        ]
+
+        # Filtrar filas no sincronizadas
+        filas_no_sincronizadas = [fila for fila in data if not fila["sincronizado"].strip()]
+
+        # Conexión a SQLite
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+
+        # Crear tabla `clientes` si no existe
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS clientes (
+                id_cliente INTEGER PRIMARY KEY,
+                nombre_cliente TEXT
+            )
+        """)
+
+        # Insertar o actualizar clientes
+        for fila in filas_no_sincronizadas:
+            id_cliente = fila["id_cliente"]
+            nombre_cliente = fila["nombre_cliente"]
+
+            if id_cliente and nombre_cliente:
+                cursor.execute("""
+                    INSERT INTO clientes (id_cliente, nombre_cliente)
+                    VALUES (?, ?)
+                    ON CONFLICT(id_cliente) DO UPDATE SET
+                    nombre_cliente = excluded.nombre_cliente
+                """, (id_cliente, nombre_cliente))
+
+                # Marcar la fila como sincronizada en Google Sheets
+                sheet.update_cell(fila["row_number"], index_sincronizado, "1")
+                logger.info(f"Cliente ID {id_cliente} sincronizado correctamente.")
+
+        # Confirmar cambios en SQLite
+        conn.commit()
+        conn.close()
+
+        logger.info("Sincronización de clientes completada.")
+    except Exception as e:
+        logger.error(f"Error al sincronizar clientes: {e}")
+
+
 
 
 if __name__ == "__main__":
@@ -201,3 +268,5 @@ if __name__ == "__main__":
         sincronizar_inicial()
     except Exception as e:
         logger.error(f"Error crítico durante la sincronización inicial: {e}")
+
+        

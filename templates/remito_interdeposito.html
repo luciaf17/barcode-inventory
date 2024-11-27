@@ -240,47 +240,62 @@
     
     // Guardar remito
     function guardarRemito() {
-        fetch('/guardar_interdeposito', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                productos: productosSeleccionados,
-                numero: document.getElementById("numero_remito").value
-            })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                alert("Remito guardado con éxito. Se generará el PDF.");
-                const pdfUrl = `/static/${data.pdf_file}`; // Evitar duplicados
-                window.open(pdfUrl, "_blank");
-            } else {
-                alert("Error al guardar el remito: " + data.error);
-            }
-        })
-        .catch(error => console.error("Error al guardar remito:", error));
+    if (productosSeleccionados.length === 0) {
+        alert("Debe agregar al menos un producto.");
+        return;
     }
+
+    const remitoData = {
+        numero_remito: document.getElementById("numero_remito").value,
+        id_cliente: document.getElementById("id_cliente").value,
+        nombre_cliente: document.getElementById("id_cliente").value,  // Obtén el nombre del cliente desde el campo
+        nro_comprobante: document.getElementById("nro_comprobante").value,
+        productos: productosSeleccionados
+    };
+
+    fetch('/guardar_remito_compra', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(remitoData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);  // Mensaje de éxito
+            // Abrir el PDF generado en una nueva pestaña del navegador
+            window.open(`/static/${data.pdf_file}`, '_blank');  // Abrir el PDF en una nueva pestaña
+        } else {
+            alert("Error: " + data.error);
+        }
+    })
+    .catch(error => console.error("Error al guardar el remito:", error));
+}
+
     
     // Cargar un remito existente
     function cargarRemito() {
-        const numero = document.getElementById("numero_remito").value.trim();
-        if (!numero) {
-            alert("Debe ingresar un número de remito.");
-            return;
-        }
-    
-        fetch(`/cargar_remito?numero=${numero}`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    productosSeleccionados = data.productos;
-                    actualizarTabla();
-                } else {
-                    alert(`Error al cargar el remito: ${data.error}`);
-                }
-            })
-            .catch(error => console.error("Error al cargar remito:", error));
+    const numero = document.getElementById("numero_remito").value.trim();
+    const tipoRemito = "Remito Interno"; // Cambiar según el formulario actual
+
+    if (!numero) {
+        alert("Debe ingresar un número de remito.");
+        return;
     }
+
+    fetch(`/cargar_remito?numero=${numero}&tipo_remito=${encodeURIComponent(tipoRemito)}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                productosSeleccionados = data.productos;
+                actualizarTabla();
+            } else {
+                alert(data.error); // Mensaje de error si el tipo no coincide
+            }
+        })
+        .catch(error => console.error("Error al cargar remito:", error));
+}
     
     // Insertar un nuevo remito
     function insertarRemito() {

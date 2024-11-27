@@ -2,6 +2,7 @@ import sqlite3
 import gspread
 from google.oauth2.service_account import Credentials
 import logging
+import time
 
 # Configuración de logging
 logging.basicConfig(level=logging.INFO)
@@ -20,11 +21,12 @@ SPREADSHEET_KEY = "1GRtJhJitw1nY4U8ZcNDJozIeMU5yMa_0pfw4hCED-hk"  # ID de la hoj
 
 # Configuración de la base de datos SQLite
 DB_FILE = "ferreteria.db"
-TABLE_NAME = "productos"
+TABLE_PRODUCTOS = "productos"
+TABLE_CLIENTES = "clientes"
 
-def sincronizar_periodica():
+def sincronizar_productos():
     """Sincroniza los productos desde Google Sheets a SQLite verificando la columna de sincronización."""
-    logger.info("Iniciando sincronización periódica...")
+    logger.info("Iniciando sincronización periódica de productos...")
 
     try:
         # Autorización y acceso a Google Sheets
@@ -67,7 +69,7 @@ def sincronizar_periodica():
             for row_number, fila in filas_sincronizar:
                 try:
                     cursor.execute(f"""
-                        INSERT INTO {TABLE_NAME} (Codigo_interno, Codigo, Desc_Concatenada, cantidad, deposito, pasillo, columna, estante, precio_cpa, precio_vta)
+                        INSERT INTO {TABLE_PRODUCTOS} (Codigo_interno, Codigo, Desc_Concatenada, cantidad, deposito, pasillo, columna, estante, precio_cpa, precio_vta)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ON CONFLICT(Codigo_interno) DO UPDATE SET
                             Codigo = excluded.Codigo,
@@ -102,12 +104,84 @@ def sincronizar_periodica():
 
             # Confirmar cambios en SQLite
             conn.commit()
-            logger.info("Sincronización periódica completada.")
+            logger.info("Sincronización periódica de productos completada.")
         except Exception as e:
             logger.error(f"Error al procesar los datos de Google Sheets: {e}")
         finally:
             conn.close()
     except Exception as e:
-        logger.error(f"Error en la sincronización periódica: {e}")
+        logger.error(f"Error en la sincronización periódica de productos: {e}")
+
+def sincronizar_clientes():
+    """Sincroniza los datos de clientes desde Google Sheets a SQLite."""
+    logger.info("Iniciando sincronización periódica de clientes...")
+
+    try:
+        # Configuración de Google Sheets
+        credentials = Credentials.from_service_account_file(CREDENTIALS_FILE, scopes=SCOPES)
+        client = gspread.authorize(credentials)
+        sheet = client.open_by_key(SPREADSHEET_KEY).worksheet("Clientes+Tipos")
+
+        # Obtener encabezados
+        headers = sheet.row_values(1)
+        index_sincronizado = headers.index("sincronizado") + 1  # Índice basado en Google Sheets
+
+        # Obtener datos de la hoja
+        rows = sheet.get_all_values()[1:]  # Excluir encabezados
+        data = [
+            {
+                "id_cliente": row[headers.index("ID_Cliente")],
+                "nombre_cliente": row[headers.index("Nombre Cliente")],
+                "sincronizado": row[index_sincronizado - 1] if len(row) > index_sincronizado - 1 else "",
+                "row_number": i + 2  # Índice de fila en Google Sheets
+            }
+            for i, row in enumerate(rows)
+        ]
+
+        # Filtrar filas no sincronizadas
+        filas_no_sincronizadas = [fila for fila in data if not fila["sincronizado"].strip()]
+
+        # Conexión a SQLite
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+
+        # Crear tabla `clientes` si no existe
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS clientes (
+                id_cliente INTEGER PRIMARY KEY,
+                nombre_cliente TEXT
+            )
+        """)
+
+        # Insertar o actualizar datos
+        for fila in filas_no_sincronizadas:
+            id_cliente = fila["id_cliente"]
+            nombre_cliente = fila["nombre_cliente"]
+
+            if id_cliente and nombre_cliente:
+                cursor.execute("""
+                    INSERT INTO clientes (id_cliente, nombre_cliente)
+                    VALUES (?, ?)
+                    ON CONFLICT(id_cliente) DO UPDATE SET
+                    nombre_cliente = excluded.nombre_cliente
+                """, (id_cliente, nombre_cliente))
+
+                # Marcar la fila como sincronizada en Google Sheets
+                sheet.update_cell(fila["row_number"], index_sincronizado, "1")
+                logger.info(f"Cliente ID {id_cliente} sincronizado correctamente.")
+
+        # Confirmar cambios en SQLite
+        conn.commit()
+        conn.close()
+
+        logger.info("Sincronización de clientes completada.")
+    except Exception as e:
+        logger.error(f"Error al sincronizar clientes: {e}")
 
 
+if __name__ == "__main__":
+    try:
+        sincronizar_productos()
+        sincronizar_clientes()
+    except Exception as e:
+        logger.error(f"Error crítico durante la sincronización periódica: {e}")

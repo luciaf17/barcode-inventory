@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template, session, redirect, url_for, send_file
+from flask import Flask, request, jsonify, render_template, session, redirect, url_for, send_file, send_from_directory
 import requests
 from bs4 import BeautifulSoup
 import gspread
@@ -15,7 +15,7 @@ from datetime import timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
 from fpdf import FPDF
 import os
-
+from math import ceil
 
 
 app = Flask(__name__, static_folder='static')
@@ -524,9 +524,15 @@ def remito_interdeposito():
     """Renderiza el formulario para remito interdepósito."""
     return render_template('remito_interdeposito.html')
 
+@app.route('/remito_compra')
+def remito_compra():
+    """Renderiza el formulario para remito_compra."""
+    return render_template('remito_compra.html')
+
+
 @app.route('/buscar_producto_interdeposito', methods=['GET'])
 def buscar_producto_interdeposito():
-    """Busca productos por código o descripción en la base de datos, permitiendo palabras clave."""
+    """Busca productos por código o descripción en la base de datos, incluyendo precio."""
     query = request.args.get('query', '').lower()
 
     if not query or len(query) < 2:
@@ -549,7 +555,7 @@ def buscar_producto_interdeposito():
 
         # Consulta SQL dinámica
         query_sql = f"""
-            SELECT Codigo_interno, Codigo, Desc_Concatenada AS descripcion, deposito 
+            SELECT Codigo_interno, Codigo, Desc_Concatenada AS descripcion, deposito, precio_cpa
             FROM productos 
             WHERE {conditions}
         """
@@ -562,7 +568,8 @@ def buscar_producto_interdeposito():
                 "codigo_interno": producto["Codigo_interno"],
                 "codigo": producto["Codigo"],
                 "descripcion": producto["descripcion"],
-                "deposito_origen": producto["deposito"]
+                "deposito_origen": producto["deposito"],
+                "precio_cpa": producto["precio_cpa"] if producto["precio_cpa"] is not None else 0  # Asignar 0 si el precio está vacío o nulo
             }
             for producto in productos
         ]
@@ -574,33 +581,61 @@ def buscar_producto_interdeposito():
     finally:
         conn.close()
 
-# Ruta para cargar un remito existente
+
+
 @app.route('/cargar_remito', methods=['GET'])
 def cargar_remito():
+    """Carga un remito existente según su número y tipo."""
     numero = request.args.get('numero')
-    if not numero:
-        return jsonify({"success": False, "error": "Debe proporcionar un número de remito."}), 400
+    tipo_remito = request.args.get('tipo_remito')  # Tipo esperado, por ejemplo 'Remito Compras'
+
+    if not numero or not tipo_remito:
+        return jsonify({"success": False, "error": "Debe proporcionar un número de remito y su tipo."}), 400
 
     try:
         rows = interdeposito_sheet.get_all_values()
-        productos = [
-            {
-                "codigo_interno": row[1],
-                "codigo": row[2],
-                "descripcion": row[3],
-                "deposito_origen": row[4],
-                "deposito_destino": row[5],
-                "cantidad": row[6],
-            }
-            for row in rows if row[9] == numero.zfill(6)
-        ]
+        productos = []
+        cliente_id = None
+        nro_comprobante = None
+        tipo_encontrado = None
+
+        # Filtrar por número de remito
+        for row in rows:
+            if row[9] == numero.zfill(6):  # Número de remito en la columna 10
+                tipo_encontrado = row[8]  # Tipo Remito (columna 9)
+                if tipo_remito != tipo_encontrado:
+                    return jsonify({"success": False, "error": f"El remito #{numero} es de tipo '{tipo_encontrado}', no '{tipo_remito}'."})
+
+                # Agregar producto a la lista
+                productos.append({
+                    "codigo_interno": row[1],  # Código Interno
+                    "codigo": row[2],         # Barcode
+                    "descripcion": row[3],     # Descripción
+                    "deposito_origen": row[4],  # Depósito Origen
+                    "deposito_destino": row[5], # Depósito Destino
+                    "cantidad": row[6],        # Cantidad
+                    "precio_cpa": row[13] if tipo_remito == "Remito Compras" else None,  # Precio CPA
+                    "nro_comprobante": row[12] if tipo_remito == "Remito Compras" else None  # Nro. Comprobante
+                })
+
+                # Obtener cliente y comprobante (suponiendo que están en las columnas adecuadas)
+                cliente_id = row[4]  # Asumir que la columna 4 es el ID del cliente
+                nro_comprobante = row[12]  # Asumir que la columna 12 es el número de comprobante
 
         if not productos:
             return jsonify({"success": False, "error": f"No se encontró el remito #{numero}."})
 
-        return jsonify({"success": True, "productos": productos})
+        return jsonify({
+            "success": True,
+            "productos": productos,
+            "cliente_id": cliente_id,
+            "nro_comprobante": nro_comprobante,
+            "tipo_remito": tipo_encontrado
+        })
     except Exception as e:
+        logger.error(f"Error al cargar remito #{numero}: {e}")
         return jsonify({"success": False, "error": str(e)})
+
 
 
 @app.route('/guardar_interdeposito', methods=['POST'])
@@ -759,6 +794,171 @@ def generar_pdf_remito(productos, nro_remito, fecha):
     return f"remitos/remito_{nro_remito}.pdf"
 
 
+def generar_pdf_remito_compra(productos, nro_remito, fecha, nombre_cliente, nro_comprobante):
+    from math import ceil
+    import os
+    from fpdf import FPDF
+
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_auto_page_break(auto=True, margin=15)
+
+    # Registrar fuentes DejaVu con variantes
+    pdf.add_font('DejaVu', '', 'static/fonts/DejaVuSansCondensed.ttf', uni=True)
+    pdf.add_font('DejaVu', 'B', 'static/fonts/DejaVuSansCondensed-Bold.ttf', uni=True)
+
+    # Encabezado
+    logo_path = "static/wouchuk-logo.png"
+    if os.path.exists(logo_path):
+        pdf.image(logo_path, 10, 8, 33)
+    pdf.set_font('DejaVu', 'B', 12)
+    pdf.cell(200, 10, f"Remito de Compra - #{nro_remito}", ln=True, align="C")
+    pdf.ln(10)
+
+    # Fecha
+    pdf.set_font('DejaVu', '', 10)
+    pdf.cell(200, 10, f"Fecha: {fecha}", ln=True, align="R")
+    pdf.ln(10)
+
+    # Nombre del Cliente
+    pdf.set_font('DejaVu', '', 10)
+    pdf.cell(200, 10, f"Cliente: {nombre_cliente}", ln=True, align="L")
+    pdf.ln(10)
+
+    # Número de Comprobante
+    if nro_comprobante:
+        pdf.cell(200, 10, f"Número de Comprobante: {nro_comprobante}", ln=True, align="L")
+        pdf.ln(10)
+
+    # Configuración de la tabla
+    pdf.set_fill_color(0, 150, 0)  # Verde del encabezado
+    pdf.set_text_color(255, 255, 255)
+    pdf.set_font('DejaVu', 'B', 8)
+
+    ancho_total_pagina = 190  # A4 menos márgenes
+    ancho_total_tabla = 170  # Ancho total de la tabla
+    margen_izquierdo = (ancho_total_pagina - ancho_total_tabla) / 2
+
+    pdf.set_x(margen_izquierdo)  # Centrar la tabla
+
+    # Encabezados de la tabla
+    pdf.cell(15, 10, "ID", border=1, align="C", fill=True)
+    pdf.cell(35, 10, "Barcode", border=1, align="C", fill=True)
+    pdf.cell(60, 10, "Descripción", border=1, align="C", fill=True)
+    pdf.cell(20, 10, "D.Destino", border=1, align="C", fill=True)
+    pdf.cell(20, 10, "Cantidad", border=1, align="C", fill=True)
+    pdf.cell(20, 10, "Precio CPA", border=1, align="C", fill=True)
+    pdf.ln()
+
+    # Filas de la tabla
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_font('DejaVu', '', 8)
+
+    for producto in productos:
+        pdf.set_x(margen_izquierdo)
+
+        # Calcular altura para la descripción (máximo de líneas necesarias)
+        max_lineas = ceil(pdf.get_string_width(producto['descripcion']) / 60)  # Ajusta el divisor según el ancho de la celda
+        altura_fila = max_lineas * 5  # Altura de cada línea
+
+        # Celda para ID
+        pdf.cell(15, altura_fila, producto['codigo_interno'], border=1, align="C")
+        # Celda para Barcode
+        pdf.cell(35, altura_fila, producto['codigo'], border=1, align="C")
+
+        # Celda para descripción como multi_cell
+        x, y = pdf.get_x(), pdf.get_y()
+        pdf.multi_cell(60, 5, producto['descripcion'], border=1, align="L")
+        pdf.set_xy(x + 60, y)  # Ajustar la posición después de multi_cell
+
+        # Celda para depósito destino
+        pdf.cell(20, altura_fila, producto['deposito_destino'], border=1, align="C")
+
+        # Celda para cantidad
+        pdf.cell(20, altura_fila, str(producto['cantidad']), border=1, align="C")
+
+        # Celda para precio cpa
+        pdf.cell(20, altura_fila, f"${producto['precio_cpa']:.2f}", border=1, align="C")
+
+        pdf.ln()
+
+    # Guardar PDF
+    pdf_dir = "static/remitos"
+    if not os.path.exists(pdf_dir):
+        os.makedirs(pdf_dir)
+
+    pdf_path = os.path.join(pdf_dir, f"remito_compra_{nro_remito}.pdf")
+    pdf.output(pdf_path)
+
+    return f"remitos/remito_compra_{nro_remito}.pdf"
+
+
+
+@app.route('/guardar_remito_compra', methods=['POST'])
+def guardar_remito_compra():
+    """Guarda o actualiza un remito de compras en Google Sheets y la base de datos."""
+    data = request.get_json()
+    productos = data.get('productos', [])
+    nombre_cliente = data.get('nombre_cliente')  # Nombre del cliente desde el frontend
+    id_cliente = data.get('id_cliente')
+    nro_comprobante = data.get('nro_comprobante', '')
+    numero_remito = data.get('numero_remito', '')
+
+    if len(productos) > 19:
+        return jsonify({"success": False, "error": "No puedes agregar más de 19 productos."}), 400
+
+    try:
+        # Guardar productos en Google Sheets
+        rows = interdeposito_sheet.get_all_values()
+        registros_a_eliminar = []
+
+        # Buscar y eliminar registros anteriores
+        for i, row in enumerate(rows):
+            if row[9] == numero_remito.zfill(6):
+                registros_a_eliminar.append(i + 1)
+
+        if registros_a_eliminar:
+            for index in reversed(registros_a_eliminar):
+                interdeposito_sheet.delete_rows(index)
+
+        for producto in productos:
+            producto_existente = False
+            for i, row in enumerate(rows):
+                if row[1] == producto['codigo_interno'] and row[9] == numero_remito.zfill(6):
+                    producto_existente = True
+                    interdeposito_sheet.update_cell(i + 1, 2, producto['codigo'])
+                    interdeposito_sheet.update_cell(i + 1, 3, producto['descripcion'])
+                    interdeposito_sheet.update_cell(i + 1, 6, producto['cantidad'])
+                    interdeposito_sheet.update_cell(i + 1, 12, producto['precio_cpa'])
+                    break
+
+            if not producto_existente:
+                interdeposito_sheet.append_row([
+                    datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),  # Fecha
+                    producto['codigo_interno'],  # Código Interno
+                    producto['codigo'],  # Código
+                    producto['descripcion'],  # Descripción
+                    id_cliente,  # ID del Cliente
+                    producto['deposito_destino'],  # Depósito Destino
+                    producto['cantidad'],  # Cantidad
+                    "",  # Campo vacío
+                    "Remito Compras",  # Tipo de remito
+                    numero_remito,  # Número de Remito
+                    id_cliente,  # ID Cliente (puede repetirse si es necesario)
+                    "0002",  # Tipo de comprobante (modificar si es necesario)
+                    nro_comprobante,  # Número de comprobante
+                    producto['precio_cpa']  # Precio de compra
+                ])
+
+        # Generar PDF después de guardar el remito
+        fecha_actual = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        pdf_file = generar_pdf_remito_compra(productos, numero_remito, fecha_actual, nombre_cliente, nro_comprobante)
+
+        return jsonify({"success": True, "message": "Remito de compra guardado correctamente.", "pdf_file": pdf_file}), 200
+
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
 
 
 @app.route('/obtener_numero_remito', methods=['GET'])
@@ -777,6 +977,8 @@ def obtener_numero_remito():
         return jsonify({"success": True, "numero_remito": nuevo_nro_remito})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
+    
+    
 
 
 
@@ -789,6 +991,42 @@ def obtener_depositos():
     except Exception as e:
         logger.error(f"Error al obtener depósitos: {e}")
         return jsonify({"success": False, "error": str(e)})
+
+
+
+
+@app.route('/buscar_cliente', methods=['GET'])
+def buscar_cliente():
+    """Busca clientes en la base de datos por nombre o ID."""
+    query = request.args.get('query', '').lower()
+
+    if not query or len(query) < 2:
+        return jsonify({"success": False, "error": "Debe ingresar al menos 2 caracteres."}), 400
+
+    conn = sqlite3.connect("ferreteria.db")
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    try:
+        keywords = query.split()
+        conditions = " AND ".join(
+            f"(LOWER(nombre_cliente) LIKE ? OR LOWER(id_cliente) LIKE ?)"
+            for _ in keywords
+        )
+        params = [f"%{kw}%" for kw in keywords for _ in range(2)]
+
+        query_sql = f"SELECT id_cliente, nombre_cliente FROM clientes WHERE {conditions}"
+        cursor.execute(query_sql, params)
+        clientes = cursor.fetchall()
+
+        resultados = [{"id_cliente": cliente["id_cliente"], "nombre_cliente": cliente["nombre_cliente"]} for cliente in clientes]
+        return jsonify({"success": True, "clientes": resultados})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+    finally:
+        conn.close()
+
+
     
 
 # Función para obtener los usuarios desde la hoja
