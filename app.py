@@ -529,6 +529,11 @@ def remito_compra():
     """Renderiza el formulario para remito_compra."""
     return render_template('remito_compra.html')
 
+@app.route('/remito_venta')
+def remito_venta():
+    """Renderiza el formulario para remito_venta."""
+    return render_template('remito_venta.html')
+
 
 @app.route('/buscar_producto_interdeposito', methods=['GET'])
 def buscar_producto_interdeposito():
@@ -643,7 +648,7 @@ def guardar_interdeposito():
     """Guarda o actualiza un remito interdepósito y genera el PDF."""
     data = request.get_json()
     productos = data.get('productos', [])
-    numero_remito = data.get('numero')  # Número asociado del remito
+    numero_remito = data.get('numero_remito')  # Número asociado del remito
 
     if len(productos) > 19:
         return jsonify({"success": False, "error": "No puedes agregar más de 19 productos."}), 400
@@ -662,7 +667,7 @@ def guardar_interdeposito():
             cursor.execute("DELETE FROM interdeposito WHERE numero_remito = ?", (numero_remito,))
         else:  # Generar nuevo número
             rows = interdeposito_sheet.get_all_values()
-            ultimo_nro_asociado = max([int(row[9]) for row in rows[1:]]) if len(rows) > 1 else 0
+            ultimo_nro_asociado = max([int(row[9]) for row in rows[1:] if row[9].isdigit()]) if len(rows) > 1 else 0
             numero_remito = str(ultimo_nro_asociado + 1).zfill(6)
 
         # Guardar productos en Google Sheets y en la base de datos
@@ -673,12 +678,12 @@ def guardar_interdeposito():
                 producto['codigo_interno'],
                 producto['codigo'],
                 producto['descripcion'],
-                producto['deposito_origen'],
-                producto['deposito_destino'],
+                producto['deposito_origen'],  # Esto debe ser correctamente asignado desde el frontend
+                producto['deposito_destino'],  # Esto se asigna correctamente al guardar el remito
                 producto['cantidad'],
-                "",
-                "Remito Interno",
-                numero_remito
+                "",  # Campo vacío
+                "Remito Interno",  # Tipo de remito
+                numero_remito  # Número de Remito
             ])
 
             # Insertar en la base de datos
@@ -710,6 +715,7 @@ def guardar_interdeposito():
         return jsonify({"success": False, "error": str(e)})
     finally:
         conn.close()
+
 
 
 def generar_pdf_remito(productos, nro_remito, fecha):
@@ -987,8 +993,6 @@ def guardar_remito_compra():
 
 
 
-
-
 @app.route('/obtener_numero_remito', methods=['GET'])
 def obtener_numero_remito():
     """Obtiene el próximo número de remito disponible basado en el mayor número actual."""
@@ -1008,8 +1012,6 @@ def obtener_numero_remito():
     
     
 
-
-
 @app.route('/obtener_depositos', methods=['GET'])
 def obtener_depositos():
     """Obtiene la lista de depósitos desde la hoja Deposito."""
@@ -1019,8 +1021,6 @@ def obtener_depositos():
     except Exception as e:
         logger.error(f"Error al obtener depósitos: {e}")
         return jsonify({"success": False, "error": str(e)})
-
-
 
 
 @app.route('/buscar_cliente', methods=['GET'])
@@ -1054,6 +1054,198 @@ def buscar_cliente():
     finally:
         conn.close()
 
+@app.route('/guardar_remito_venta', methods=['POST'])
+def guardar_remito_venta():
+    """Guarda o actualiza un remito de ventas en Google Sheets y la base de datos."""
+    data = request.get_json()
+    productos = data.get('productos', [])
+    nombre_cliente = data.get('nombre_cliente')  # Nombre del cliente desde el frontend
+    id_cliente = data.get('id_cliente')
+    nro_comprobante = data.get('nro_comprobante', '')
+    numero_remito = data.get('numero_remito', '')
+
+    if len(productos) > 19:
+        return jsonify({"success": False, "error": "No puedes agregar más de 19 productos."}), 400
+
+    try:
+        conn = sqlite3.connect("ferreteria.db")
+        cursor = conn.cursor()
+
+        if numero_remito:  # Si se proporciona un número, editar
+            rows = interdeposito_sheet.get_all_values()
+            indices = [i + 1 for i, row in enumerate(rows) if row[9] == numero_remito.zfill(6)]
+            for index in reversed(indices):
+                interdeposito_sheet.delete_rows(index)
+
+            # Eliminar también de la base de datos
+            cursor.execute("DELETE FROM remito_ventas WHERE numero_remito = ?", (numero_remito,))
+        else:  # Generar nuevo número
+            rows = interdeposito_sheet.get_all_values()
+            ultimo_nro_asociado = max([int(row[9]) for row in rows[1:] if row[9].isdigit()]) if len(rows) > 1 else 0
+            numero_remito = str(ultimo_nro_asociado + 1).zfill(6)
+
+        # Guardar productos en Google Sheets y en la base de datos
+        for producto in productos:
+            # Verificar que el precio_venta sea un número válido
+            precio_venta = producto.get('precio_venta', 0.0)
+            if precio_venta is None or isinstance(precio_venta, str):
+                try:
+                    precio_venta = float(precio_venta) if precio_venta else 0.0
+                except ValueError:
+                    precio_venta = 0.0  # Si no se puede convertir, asignar un valor por defecto
+
+            # Insertar en Google Sheets
+            interdeposito_sheet.append_row([
+                    datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),  # Fecha
+                    producto['codigo_interno'],  # Código Interno
+                    producto['codigo'],  # Código
+                    producto['descripcion'],  # Descripción
+                    producto['deposito_origen'],
+                    id_cliente,  # ID del Cliente (en deposito_origen)  # Depósito Destino (ID del cliente)
+                    producto['cantidad'],  # Cantidad
+                    "",  # Campo vacío
+                    "Remito Ventas",  # Tipo de remito
+                    numero_remito,  # Número de Remito
+                    id_cliente,  # ID Cliente (puede repetirse si es necesario)
+                    "0003",  # Tipo de comprobante (modificar si es necesario)
+                    nro_comprobante,  # Número de comprobante
+                    "",  # Campo vacío
+                    precio_venta  # Precio de venta
+                ])
+
+            # Insertar en la base de datos
+            cursor.execute("""
+                INSERT INTO remito_ventas (
+                    fecha, codigo_interno, codigo, descripcion,
+                    deposito_origen, deposito_destino, cantidad, tipo, 
+                    numero_remito, nro_comprobante, precio_venta
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                producto['codigo_interno'],
+                producto['codigo'],
+                producto['descripcion'],
+                id_cliente,  # Guardamos el id_cliente en deposito_origen
+                producto['deposito_destino'],
+                producto['cantidad'],
+                "Remito Ventas",  # El tipo se mantiene como "Remito Ventas"
+                numero_remito,
+                nro_comprobante,
+                precio_venta  # Se utiliza el valor verificado de precio_venta
+            ))
+
+        conn.commit()
+
+        # Generar PDF
+        fecha_actual = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        pdf_file = generar_pdf_remito_venta(productos, numero_remito, fecha_actual, nombre_cliente, nro_comprobante)
+
+        return jsonify({"success": True, "message": "Remito de venta guardado correctamente.", "pdf_file": pdf_file, "numero_remito": numero_remito}), 200
+
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+    finally:
+        conn.close()  # Asegúrate de que esta línea esté correctamente indentada
+
+
+
+def generar_pdf_remito_venta(productos, nro_remito, fecha, nombre_cliente, nro_comprobante):
+    from math import ceil
+    import os
+    from fpdf import FPDF
+
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_auto_page_break(auto=True, margin=15)
+
+    # Registrar fuentes DejaVu con variantes
+    pdf.add_font('DejaVu', '', 'static/fonts/DejaVuSansCondensed.ttf', uni=True)
+    pdf.add_font('DejaVu', 'B', 'static/fonts/DejaVuSansCondensed-Bold.ttf', uni=True)
+
+    # Encabezado
+    logo_path = "static/wouchuk-logo.png"
+    if os.path.exists(logo_path):
+        pdf.image(logo_path, 10, 8, 33)
+    pdf.set_font('DejaVu', 'B', 12)
+    pdf.cell(200, 10, f"Remito de Venta - #{nro_remito}", ln=True, align="C")
+    pdf.ln(10)
+
+    # Fecha
+    pdf.set_font('DejaVu', '', 10)
+    pdf.cell(200, 10, f"Fecha: {fecha}", ln=True, align="R")
+    pdf.ln(10)
+
+    # Nombre del Cliente
+    pdf.set_font('DejaVu', '', 10)
+    pdf.cell(200, 10, f"Cliente: {nombre_cliente}", ln=True, align="L")
+    pdf.ln(10)
+
+    # Número de Comprobante
+    if nro_comprobante:
+        pdf.cell(200, 10, f"Número de Comprobante: {nro_comprobante}", ln=True, align="L")
+        pdf.ln(10)
+
+    # Configuración de la tabla
+    pdf.set_fill_color(0, 150, 0)  # Verde del encabezado
+    pdf.set_text_color(255, 255, 255)
+    pdf.set_font('DejaVu', 'B', 8)
+
+    ancho_total_pagina = 190  # A4 menos márgenes
+    ancho_total_tabla = 170  # Ancho total de la tabla
+    margen_izquierdo = (ancho_total_pagina - ancho_total_tabla) / 2
+
+    pdf.set_x(margen_izquierdo)  # Centrar la tabla
+
+    # Encabezados de la tabla
+    pdf.cell(15, 10, "ID", border=1, align="C", fill=True)
+    pdf.cell(35, 10, "Barcode", border=1, align="C", fill=True)
+    pdf.cell(60, 10, "Descripción", border=1, align="C", fill=True)
+    pdf.cell(20, 10, "D.Origen", border=1, align="C", fill=True)
+    pdf.cell(20, 10, "Cantidad", border=1, align="C", fill=True)
+    pdf.cell(20, 10, "Precio Venta", border=1, align="C", fill=True)
+    pdf.ln()
+
+    # Filas de la tabla
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_font('DejaVu', '', 8)
+
+    for producto in productos:
+        pdf.set_x(margen_izquierdo)
+
+        # Calcular altura para la descripción (máximo de líneas necesarias)
+        max_lineas = ceil(pdf.get_string_width(producto['descripcion']) / 60)  # Ajusta el divisor según el ancho de la celda
+        altura_fila = max_lineas * 5  # Altura de cada línea
+
+        # Celda para ID
+        pdf.cell(15, altura_fila, producto['codigo_interno'], border=1, align="C")
+        # Celda para Barcode
+        pdf.cell(35, altura_fila, producto['codigo'], border=1, align="C")
+
+        # Celda para descripción como multi_cell
+        x, y = pdf.get_x(), pdf.get_y()
+        pdf.multi_cell(60, 5, producto['descripcion'], border=1, align="L")
+        pdf.set_xy(x + 60, y)  # Ajustar la posición después de multi_cell
+
+        # Celda para depósito destino
+        pdf.cell(20, altura_fila, producto['deposito_origen'], border=1, align="C")
+
+        # Celda para cantidad
+        pdf.cell(20, altura_fila, str(producto['cantidad']), border=1, align="C")
+
+        # Celda para precio venta
+        pdf.cell(20, altura_fila, f"${producto['precio_venta']:.2f}", border=1, align="C")
+
+        pdf.ln()
+
+    # Guardar PDF
+    pdf_dir = "static/remitos"
+    if not os.path.exists(pdf_dir):
+        os.makedirs(pdf_dir)
+
+    pdf_path = os.path.join(pdf_dir, f"remito_venta_{nro_remito}.pdf")
+    pdf.output(pdf_path)
+
+    return f"remitos/remito_venta_{nro_remito}.pdf"
 
     
 
