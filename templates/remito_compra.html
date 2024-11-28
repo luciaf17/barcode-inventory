@@ -112,121 +112,228 @@
 
     // Cargar remito existente
     function cargarRemito() {
-        const numero = document.getElementById("numero_remito").value.trim();
-        const tipoRemito = "Remito Compras"; // Cambiar según el formulario actual
+    const numero = document.getElementById("numero_remito").value.trim();
+    const tipoRemito = "Remito Compras"; // Cambiar según el formulario actual
 
-        if (!numero) {
-            alert("Debe ingresar un número de remito.");
-            return;
-        }
-
-        fetch(`/cargar_remito?numero=${numero}&tipo_remito=${encodeURIComponent(tipoRemito)}`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    productosSeleccionados = data.productos;
-                    actualizarTabla();
-
-                    // Llenar los campos con los datos del remito
-                    document.getElementById("id_cliente").value = data.cliente_id || '';  // Asignar ID del cliente
-                    document.getElementById("nro_comprobante").value = data.nro_comprobante || '';  // Asignar Nro. Comprobante
-                } else {
-                    alert(data.error); // Mostrar error si no se encuentra el remito o tipo
-                }
-            })
-            .catch(error => console.error("Error al cargar remito:", error));
+    if (!numero) {
+        alert("Debe ingresar un número de remito.");
+        return;
     }
 
-    // Función para guardar e imprimir
-    function guardarRemito() {
-        if (productosSeleccionados.length === 0) {
-            alert("Debe agregar al menos un producto.");
-            return;
-        }
-
-        // Obtener el nombre del cliente desde el campo correspondiente
-        const nombreCliente = document.getElementById("buscar_cliente").value;  // Nombre del cliente
-
-        const remitoData = {
-            numero_remito: document.getElementById("numero_remito").value,
-            id_cliente: document.getElementById("id_cliente").value,  
-            nombre_cliente: nombreCliente,  
-            nro_comprobante: document.getElementById("nro_comprobante").value,
-            productos: productosSeleccionados  // Aquí se pasan los productos con precio_cpa
-        };
-
-        fetch('/guardar_remito_compra', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(remitoData)
-        })
+    fetch(`/cargar_remito?numero=${numero}&tipo_remito=${encodeURIComponent(tipoRemito)}`)
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                alert(data.message);
-                window.open(`/static/${data.pdf_file}`, '_blank');  // Abrir el PDF en una nueva pestaña
+                productosSeleccionados = data.productos;
+                actualizarTabla();
+
+                // Llenar los campos con los datos del remito
+                document.getElementById("id_cliente").value = data.cliente_id || '';  // Asignar ID del cliente
+                document.getElementById("nro_comprobante").value = data.nro_comprobante || '';  // Asignar Nro. Comprobante
             } else {
-                alert("Error: " + data.error);
+                alert(data.error); // Mostrar error si no se encuentra el remito o tipo
             }
         })
-        .catch(error => console.error("Error al guardar el remito:", error));
+        .catch(error => console.error("Error al cargar remito:", error));
+}
+
+
+    // Función para guardar e imprimir
+   // Función para guardar e imprimir
+function guardarRemito() {
+    if (productosSeleccionados.length === 0) {
+        alert("Debe agregar al menos un producto.");
+        return;
     }
 
+    // Obtener el nombre del cliente desde el campo correspondiente
+    const nombreCliente = document.getElementById("buscar_cliente").value;  // Nombre del cliente
+
+    const remitoData = {
+    numero_remito: document.getElementById("numero_remito").value,
+    id_cliente: document.getElementById("id_cliente").value,  
+    nombre_cliente: nombreCliente,  
+    nro_comprobante: document.getElementById("nro_comprobante").value,
+    productos: productosSeleccionados  // Aquí se pasan los productos con precio_cpa
+};
+
+
+    fetch('/guardar_remito_compra', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(remitoData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);
+            window.open(`/static/${data.pdf_file}`, '_blank');  // Abrir el PDF en una nueva pestaña
+        } else {
+            alert("Error: " + data.error);
+        }
+    })
+    .catch(error => console.error("Error al guardar el remito:", error));
+}
+
+
+
+
+    // Función para generar el PDF
+    function generarPDF() {
+        const numero_remito = document.getElementById("numero_remito").value;
+        const fecha = new Date().toLocaleDateString();
+
+        // Realizar la llamada para generar el PDF
+        fetch(`/generar_pdf_remito_compra?numero_remito=${numero_remito}&fecha=${fecha}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert("El PDF del remito se ha generado correctamente.");
+                    // Refrescar la página para un nuevo remito
+                    window.location.reload();
+                } else {
+                    alert("Error al generar el PDF.");
+                }
+            })
+            .catch(error => console.error("Error al generar el PDF:", error));
+    }
+
+    // Buscar cliente
+    function buscarCliente() {
+        const query = document.getElementById("buscar_cliente").value.trim();
+        if (query.length < 2) {
+            document.getElementById("resultados_clientes").innerHTML = "<p>Ingrese al menos 2 caracteres</p>";
+            return;
+        }
+
+        fetch(`/buscar_cliente?query=${encodeURIComponent(query)}`)
+            .then(response => response.json())
+            .then(data => {
+                const resultados = document.getElementById("resultados_clientes");
+                resultados.innerHTML = "";
+
+                if (data.clientes.length > 0) {
+                    data.clientes.forEach(cliente => {
+                        const item = document.createElement("div");
+                        item.classList.add("result-item");
+                        item.textContent = `${cliente.nombre_cliente} (ID: ${cliente.id_cliente})`;
+                        item.onclick = () => seleccionarCliente(cliente);
+                        resultados.appendChild(item);
+                    });
+                } else {
+                    resultados.innerHTML = "<p>No se encontraron resultados.</p>";
+                }
+            })
+            .catch(error => console.error("Error al buscar cliente:", error));
+    }
+
+    function seleccionarCliente(cliente) {
+        document.getElementById("id_cliente").value = cliente.id_cliente;
+        document.getElementById("buscar_cliente").value = cliente.nombre_cliente;
+        document.getElementById("resultados_clientes").innerHTML = "";
+    }
+
+    // Buscar productos
+    function buscarProducto() {
+        const query = document.getElementById("buscar_producto").value.trim();
+        if (query.length < 2) {
+            document.getElementById("resultados_productos").innerHTML = "<p>Ingrese al menos 2 caracteres</p>";
+            return;
+        }
+
+        fetch(`/buscar_producto_interdeposito?query=${encodeURIComponent(query)}`)
+            .then(response => response.json())
+            .then(data => {
+                const resultados = document.getElementById("resultados_productos");
+                resultados.innerHTML = "";
+
+                if (data.productos.length > 0) {
+                    data.productos.forEach(producto => {
+                        const item = document.createElement("div");
+                        item.classList.add("result-item");
+                        item.textContent = `${producto.descripcion} (Código Interno: ${producto.codigo_interno})`;
+                        item.onclick = () => agregarProducto(producto);
+                        resultados.appendChild(item);
+                    });
+                } else {
+                    resultados.innerHTML = "<p>No se encontraron resultados.</p>";
+                }
+            })
+            .catch(error => console.error("Error al buscar producto:", error));
+    }
+
+    // Verificar en la función agregarProducto si el precio_cpa está bien asignado
+    function agregarProducto(producto) {
+    if (productosSeleccionados.some(p => p.codigo_interno === producto.codigo_interno)) {
+        alert("Este producto ya está seleccionado.");
+        return;
+    }
+
+    // Verificar y asegurar que el precio_cpa está bien asignado
+    producto.deposito_origen = document.getElementById("id_cliente").value;
+    producto.deposito_destino = "D0";
+    producto.cantidad = 1;
+    producto.precio_cpa = parseFloat(producto.precio_cpa) || 0; // Asegúrate de que se asigna correctamente
+
+    productosSeleccionados.push(producto);
+    actualizarTabla();
+}
+
+
+
+    // Actualizar la tabla de productos seleccionados
     // Función para actualizar la tabla de productos seleccionados
     function actualizarTabla() {
-        const tabla = document.getElementById("tabla_productos").querySelector("tbody");
-        tabla.innerHTML = "";
+    const tabla = document.getElementById("tabla_productos").querySelector("tbody");
+    tabla.innerHTML = "";
 
-        productosSeleccionados.forEach((producto, index) => {
-            const fila = document.createElement("tr");
-            fila.innerHTML = `
-                <td>${producto.codigo_interno}</td>
-                <td>${producto.codigo || "-"}</td>
-                <td>${producto.descripcion}</td>
-                <td>
-                    <select data-index="${index}" onchange="actualizarDepositoDestino(event)">
-                        ${depositos.map(deposito => `
-                            <option value="${deposito}" ${producto.deposito_destino === deposito ? "selected" : ""}>
-                                ${deposito}
-                            </option>
-                        `).join("")}
-                    </select>
-                </td>
-                <td>
-                    <input type="number" value="${producto.cantidad}" min="1" data-index="${index}" onchange="actualizarCantidad(event)">
-                </td>
-                <td>
-                    <input type="number" value="${producto.precio_cpa}" step="0.01" data-index="${index}" onchange="actualizarPrecioCompra(event)">
-                </td>
-                <td>
-                    <button type="button" class="btn btn-danger" onclick="eliminarProducto(${index})">Eliminar</button>
-                </td>
-            `;
-            tabla.appendChild(fila);
-        });
-    }
+    productosSeleccionados.forEach((producto, index) => {
+        const fila = document.createElement("tr");
+        fila.innerHTML = `
+            <td>${producto.codigo_interno}</td>
+            <td>${producto.codigo || "-"}</td>
+            <td>${producto.descripcion}</td>
+            <td>
+                <select data-index="${index}" onchange="actualizarDepositoDestino(event)">
+                    ${depositos.map(deposito => `
+                        <option value="${deposito}" ${producto.deposito_destino === deposito ? "selected" : ""}>
+                            ${deposito}
+                        </option>
+                    `).join("")}
+                </select>
+            </td>
+            <td>
+                <input type="number" value="${producto.cantidad}" min="1" data-index="${index}" onchange="actualizarCantidad(event)">
+            </td>
+            <td>
+                <input type="number" value="${producto.precio_cpa}" step="0.01" data-index="${index}" onchange="actualizarPrecioCompra(event)">
+            </td>
+            <td>
+                <button type="button" class="btn btn-danger" onclick="eliminarProducto(${index})">Eliminar</button>
+            </td>
+        `;
+        tabla.appendChild(fila);
+    });
+}
 
-    // Actualizar precio de compra
-    function actualizarPrecioCompra(event) {
-        const index = event.target.dataset.index;
-        productosSeleccionados[index].precio_cpa = parseFloat(event.target.value);  // Asegúrate de que esto sea un número
-    }
+function actualizarPrecioCompra(event) {
+    const index = event.target.dataset.index;
+    productosSeleccionados[index].precio_cpa = parseFloat(event.target.value);  // Asegúrate de que esto sea un número
+}
 
-    // Actualizar depósito de destino
     function actualizarDepositoDestino(event) {
         const index = event.target.dataset.index;
         productosSeleccionados[index].deposito_destino = event.target.value;
     }
 
-    // Actualizar cantidad
     function actualizarCantidad(event) {
         const index = event.target.dataset.index;
         productosSeleccionados[index].cantidad = parseInt(event.target.value, 10);
     }
 
-    // Eliminar producto
+
     function eliminarProducto(index) {
         productosSeleccionados.splice(index, 1);
         actualizarTabla();
@@ -243,16 +350,16 @@
             })
             .catch(error => console.error("Error al cargar depósitos:", error));
     }
-
-    // Insertar nuevo remito
     function insertarRemito() {
-        productosSeleccionados = [];  // Limpiar la lista de productos seleccionados
-        actualizarTabla();  // Actualizar la tabla para reflejar que no hay productos
-        document.getElementById("numero_remito").value = '';  // Limpiar el campo de número de remito
-        document.getElementById("id_cliente").value = '';  // Limpiar el campo de ID del cliente
-        document.getElementById("nro_comprobante").value = '';  // Limpiar el campo de número de comprobante
-        obtenerNumeroRemito();  // Obtener el próximo número de remito
-    }
+    productosSeleccionados = [];  // Limpiar la lista de productos seleccionados
+    actualizarTabla();  // Actualizar la tabla para reflejar que no hay productos
+    document.getElementById("numero_remito").value = '';  // Limpiar el campo de número de remito
+    document.getElementById("id_cliente").value = '';  // Limpiar el campo de ID del cliente
+    document.getElementById("nro_comprobante").value = '';  // Limpiar el campo de número de comprobante
+    obtenerNumeroRemito();  // Obtener el próximo número de remito
+}
+
+
 
     // Cargar el número de remito al cargar la página
     document.addEventListener('DOMContentLoaded', function () {

@@ -822,7 +822,7 @@ def generar_pdf_remito_compra(productos, nro_remito, fecha, nombre_cliente, nro_
 
     # Nombre del Cliente
     pdf.set_font('DejaVu', '', 10)
-    pdf.cell(200, 10, f"Cliente: {nombre_cliente}", ln=True, align="L")
+    pdf.cell(200, 10, f"Proveedor: {nombre_cliente}", ln=True, align="L")
     pdf.ln(10)
 
     # Número de Comprobante
@@ -893,7 +893,6 @@ def generar_pdf_remito_compra(productos, nro_remito, fecha, nombre_cliente, nro_
     return f"remitos/remito_compra_{nro_remito}.pdf"
 
 
-
 @app.route('/guardar_remito_compra', methods=['POST'])
 def guardar_remito_compra():
     """Guarda o actualiza un remito de compras en Google Sheets y la base de datos."""
@@ -908,32 +907,34 @@ def guardar_remito_compra():
         return jsonify({"success": False, "error": "No puedes agregar más de 19 productos."}), 400
 
     try:
-        # Guardar productos en Google Sheets
-        rows = interdeposito_sheet.get_all_values()
-        registros_a_eliminar = []
+        conn = sqlite3.connect("ferreteria.db")
+        cursor = conn.cursor()
 
-        # Buscar y eliminar registros anteriores
-        for i, row in enumerate(rows):
-            if row[9] == numero_remito.zfill(6):
-                registros_a_eliminar.append(i + 1)
-
-        if registros_a_eliminar:
-            for index in reversed(registros_a_eliminar):
+        if numero_remito:  # Si se proporciona un número, editar
+            rows = interdeposito_sheet.get_all_values()
+            indices = [i + 1 for i, row in enumerate(rows) if row[9] == numero_remito.zfill(6)]
+            for index in reversed(indices):
                 interdeposito_sheet.delete_rows(index)
 
-        for producto in productos:
-            producto_existente = False
-            for i, row in enumerate(rows):
-                if row[1] == producto['codigo_interno'] and row[9] == numero_remito.zfill(6):
-                    producto_existente = True
-                    interdeposito_sheet.update_cell(i + 1, 2, producto['codigo'])
-                    interdeposito_sheet.update_cell(i + 1, 3, producto['descripcion'])
-                    interdeposito_sheet.update_cell(i + 1, 6, producto['cantidad'])
-                    interdeposito_sheet.update_cell(i + 1, 12, producto['precio_cpa'])
-                    break
+            # Eliminar también de la base de datos
+            cursor.execute("DELETE FROM remito_compra WHERE numero_remito = ?", (numero_remito,))
+        else:  # Generar nuevo número
+            rows = interdeposito_sheet.get_all_values()
+            ultimo_nro_asociado = max([int(row[9]) for row in rows[1:] if row[9].isdigit()]) if len(rows) > 1 else 0
+            numero_remito = str(ultimo_nro_asociado + 1).zfill(6)
 
-            if not producto_existente:
-                interdeposito_sheet.append_row([
+        # Guardar productos en Google Sheets y en la base de datos
+        for producto in productos:
+            # Verificar que el precio_cpa sea un número válido
+            precio_cpa = producto.get('precio_cpa', 0.0)
+            if precio_cpa is None or isinstance(precio_cpa, str):
+                try:
+                    precio_cpa = float(precio_cpa) if precio_cpa else 0.0
+                except ValueError:
+                    precio_cpa = 0.0  # Si no se puede convertir, asignar un valor por defecto
+
+            # Insertar en Google Sheets
+            interdeposito_sheet.append_row([
                     datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),  # Fecha
                     producto['codigo_interno'],  # Código Interno
                     producto['codigo'],  # Código
@@ -950,14 +951,41 @@ def guardar_remito_compra():
                     producto['precio_cpa']  # Precio de compra
                 ])
 
-        # Generar PDF después de guardar el remito
+            # Insertar en la base de datos
+            cursor.execute("""
+                INSERT INTO remito_compra (
+                    fecha, codigo_interno, codigo, descripcion,
+                    deposito_origen, deposito_destino, cantidad, tipo, 
+                    numero_remito, nro_comprobante, precio_cpa
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                producto['codigo_interno'],
+                producto['codigo'],
+                producto['descripcion'],
+                id_cliente,  # Guardamos el id_cliente en deposito_origen
+                producto['deposito_destino'],
+                producto['cantidad'],
+                "Remito Compras",  # El tipo se mantiene como "Remito Compras"
+                numero_remito,
+                nro_comprobante,
+                precio_cpa  # Se utiliza el valor verificado de precio_cpa
+            ))
+
+        conn.commit()
+
+        # Generar PDF
         fecha_actual = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         pdf_file = generar_pdf_remito_compra(productos, numero_remito, fecha_actual, nombre_cliente, nro_comprobante)
 
-        return jsonify({"success": True, "message": "Remito de compra guardado correctamente.", "pdf_file": pdf_file}), 200
+        return jsonify({"success": True, "message": "Remito de compra guardado correctamente.", "pdf_file": pdf_file, "numero_remito": numero_remito}), 200
 
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
+    finally:
+        conn.close()  # Asegúrate de que esta línea esté correctamente indentada
+
+
 
 
 
