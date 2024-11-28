@@ -195,13 +195,16 @@
     .then(data => {
         if (data.success) {
             alert(data.message);
-            window.open(`/static/${data.pdf_file}`, '_blank');  // Abrir el PDF en una nueva pestaña
+            // Cambiar la ruta a una absoluta para abrir el archivo PDF
+            const pdfFilePath = `file:///C:/qr-python-3.0/static/${data.pdf_file}`;  // Ruta absoluta del archivo PDF
+            window.open(pdfFilePath, '_blank');  // Abrir el PDF en una nueva pestaña
         } else {
             alert("Error: " + data.error);
         }
     })
     .catch(error => console.error("Error al guardar el remito:", error));
 }
+
 
 
 

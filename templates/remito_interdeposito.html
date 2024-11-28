@@ -247,40 +247,40 @@
     
     // Guardar remito
     function guardarRemito() {
-        if (productosSeleccionados.length === 0) {
-            alert("Debe agregar al menos un producto.");
-            return;
-        }
-
-        console.log("Datos a guardar:", {
-            numero_remito: document.getElementById("numero_remito").value,
-            productos: productosSeleccionados
-        });
-
-        const remitoData = {
-            numero_remito: document.getElementById("numero_remito").value,
-            productos: productosSeleccionados
-        };
-
-        fetch('/guardar_interdeposito', {  // Cambié el endpoint a /guardar_interdeposito
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(remitoData)
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                alert(data.message);  // Mensaje de éxito
-                // Abrir el PDF generado en una nueva pestaña del navegador
-                window.open(`/static/${data.pdf_file}`, '_blank');  // Abrir el PDF en una nueva pestaña
-            } else {
-                alert("Error: " + data.error);
-            }
-        })
-        .catch(error => console.error("Error al guardar el remito:", error));
+    if (productosSeleccionados.length === 0) {
+        alert("Debe agregar al menos un producto.");
+        return;
     }
+
+    // Obtener el nombre del cliente desde la variable global
+    const nombreCliente = window.clienteNombre || document.getElementById("buscar_cliente").value;  // Verificamos si el nombre ya está disponible
+
+    const remitoData = {
+        numero_remito: document.getElementById("numero_remito").value,
+        id_cliente: document.getElementById("id_cliente").value,  
+        nombre_cliente: nombreCliente,  // Aseguramos que se pase el nombre correctamente
+        nro_comprobante: document.getElementById("nro_comprobante").value,
+        productos: productosSeleccionados  // Aquí se pasan los productos con precio_venta
+    };
+
+    fetch('/guardar_remito_venta', {  // Cambié el endpoint a /guardar_remito_venta
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(remitoData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);
+            window.open(`/static/${data.pdf_file}`, '_blank');  // Abrir el PDF en una nueva pestaña
+        } else {
+            alert("Error: " + data.error);
+        }
+    })
+    .catch(error => console.error("Error al guardar el remito:", error));
+}
     
     // Insertar un nuevo remito
     function insertarRemito() {

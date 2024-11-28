@@ -140,6 +140,7 @@
 
     // Función para guardar e imprimir
    // Función para guardar e imprimir
+// Función para guardar e imprimir
 function guardarRemito() {
     if (productosSeleccionados.length === 0) {
         alert("Debe agregar al menos un producto.");
@@ -150,13 +151,12 @@ function guardarRemito() {
     const nombreCliente = document.getElementById("buscar_cliente").value;  // Nombre del cliente
 
     const remitoData = {
-    numero_remito: document.getElementById("numero_remito").value,
-    id_cliente: document.getElementById("id_cliente").value,  
-    nombre_cliente: nombreCliente,  
-    nro_comprobante: document.getElementById("nro_comprobante").value,
-    productos: productosSeleccionados  // Aquí se pasan los productos con precio_cpa
-};
-
+        numero_remito: document.getElementById("numero_remito").value,
+        id_cliente: document.getElementById("id_cliente").value,  
+        nombre_cliente: nombreCliente,  
+        nro_comprobante: document.getElementById("nro_comprobante").value,
+        productos: productosSeleccionados  // Aquí se pasan los productos con precio_cpa
+    };
 
     fetch('/guardar_remito_compra', {
         method: 'POST',
@@ -169,13 +169,18 @@ function guardarRemito() {
     .then(data => {
         if (data.success) {
             alert(data.message);
-            window.open(`/static/${data.pdf_file}`, '_blank');  // Abrir el PDF en una nueva pestaña
+            
+            // Cambia esta línea para usar la ruta absoluta
+            const pdfFilePath = `file:///C:/qr-python-3.0/static/${data.pdf_file}`;  // Ruta absoluta del archivo PDF
+
+            window.open(pdfFilePath, '_blank');  // Abrir el PDF en una nueva pestaña
         } else {
             alert("Error: " + data.error);
         }
     })
     .catch(error => console.error("Error al guardar el remito:", error));
 }
+
 
 
 

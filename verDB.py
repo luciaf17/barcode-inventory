@@ -5,7 +5,7 @@ conn = sqlite3.connect("ferreteria.db")
 cursor = conn.cursor()
 
 # Ejecuta una consulta para obtener datos
-cursor.execute("SELECT * FROM remito_ventas")
+cursor.execute("SELECT * FROM productos")
 
 # Recupera los resultados
 rows = cursor.fetchall()
